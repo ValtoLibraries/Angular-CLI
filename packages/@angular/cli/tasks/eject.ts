@@ -26,7 +26,6 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const SubresourceIntegrityPlugin = require('webpack-subresource-integrity');
 const SilentError = require('silent-error');
 const CircularDependencyPlugin = require('circular-dependency-plugin');
-const ConcatPlugin = require('webpack-concat-plugin');
 const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 const Task = require('../ember-cli/lib/models/task');
 
@@ -159,18 +158,6 @@ class JsonWebpackSerializer {
     return plugin.options;
   }
 
-  private _concatPlugin(plugin: any) {
-    const options = plugin.settings;
-    if (!options || !options.filesToConcat) {
-      return options;
-    }
-
-    const filesToConcat = options.filesToConcat
-      .map((file: string) => path.relative(process.cwd(), file));
-
-    return { ...options, filesToConcat };
-  }
-
   private _uglifyjsPlugin(plugin: any) {
     return plugin.options;
   }
@@ -203,7 +190,9 @@ class JsonWebpackSerializer {
           this._addImport('webpack.optimize', 'ModuleConcatenationPlugin');
           break;
         case angularCliPlugins.BaseHrefWebpackPlugin:
+        case angularCliPlugins.CleanCssWebpackPlugin:
         case angularCliPlugins.NamedLazyChunksWebpackPlugin:
+        case angularCliPlugins.ScriptsWebpackPlugin:
         case angularCliPlugins.SuppressExtractedTextChunksWebpackPlugin:
           this._addImport('@angular/cli/plugins/webpack', plugin.constructor.name);
           break;
@@ -248,10 +237,6 @@ class JsonWebpackSerializer {
         case LicenseWebpackPlugin:
           args = this._licenseWebpackPlugin(plugin);
           this._addImport('license-webpack-plugin', 'LicenseWebpackPlugin');
-          break;
-        case ConcatPlugin:
-          args = this._concatPlugin(plugin);
-          this.variableImports['webpack-concat-plugin'] = 'ConcatPlugin';
           break;
         case UglifyJSPlugin:
           args = this._uglifyjsPlugin(plugin);
@@ -521,31 +506,35 @@ export default Task.extend({
       .then((packageJson: string) => JSON.parse(packageJson))
       .then((packageJson: any) => {
         const scripts = packageJson['scripts'];
-        if (scripts['build'] && scripts['build'] !== 'ng build' && !force) {
-          throw new SilentError(oneLine`
-            Your package.json scripts must not contain a build script as it will be overwritten.
-          `);
-        }
-        if (scripts['start'] && scripts['start'] !== 'ng serve' && !force) {
-          throw new SilentError(oneLine`
-            Your package.json scripts must not contain a start script as it will be overwritten.
-          `);
-        }
-        if (scripts['pree2e'] && scripts['pree2e'] !== pree2eNpmScript && !force) {
-          throw new SilentError(oneLine`
-            Your package.json scripts must not contain a pree2e script as it will be
-            overwritten.
-          `);
-        }
-        if (scripts['e2e'] && scripts['e2e'] !== 'ng e2e' && !force) {
-          throw new SilentError(oneLine`
-            Your package.json scripts must not contain a e2e script as it will be overwritten.
-          `);
-        }
-        if (scripts['test'] && scripts['test'] !== 'ng test' && !force) {
-          throw new SilentError(oneLine`
-            Your package.json scripts must not contain a test script as it will be overwritten.
-          `);
+        if (!force) {
+          if (scripts['build']
+              && scripts['build'] != 'ng build'
+              && scripts['build'] != 'ng build --prod') {
+            throw new SilentError(oneLine`
+              Your package.json scripts must not contain a build script as it will be overwritten.
+            `);
+          }
+          if (scripts['start'] && scripts['start'] !== 'ng serve') {
+            throw new SilentError(oneLine`
+              Your package.json scripts must not contain a start script as it will be overwritten.
+            `);
+          }
+          if (scripts['pree2e'] && scripts['pree2e'] !== pree2eNpmScript) {
+            throw new SilentError(oneLine`
+              Your package.json scripts must not contain a pree2e script as it will be
+              overwritten.
+            `);
+          }
+          if (scripts['e2e'] && scripts['e2e'] !== 'ng e2e') {
+            throw new SilentError(oneLine`
+              Your package.json scripts must not contain a e2e script as it will be overwritten.
+            `);
+          }
+          if (scripts['test'] && scripts['test'] !== 'ng test') {
+            throw new SilentError(oneLine`
+              Your package.json scripts must not contain a test script as it will be overwritten.
+            `);
+          }
         }
 
         packageJson['scripts']['build'] = 'webpack';
@@ -577,7 +566,6 @@ export default Task.extend({
           'webpack',
           'autoprefixer',
           'css-loader',
-          'cssnano',
           'exports-loader',
           'file-loader',
           'html-webpack-plugin',
@@ -594,7 +582,6 @@ export default Task.extend({
           'stylus-loader',
           'url-loader',
           'circular-dependency-plugin',
-          'webpack-concat-plugin',
           'copy-webpack-plugin',
           'uglifyjs-webpack-plugin',
         ].forEach((packageName: string) => {
