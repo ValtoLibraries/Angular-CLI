@@ -5,26 +5,31 @@
  * require('@schematics/angular')
  */
 
+import { schema } from '@angular-devkit/core';
 import {
   Collection,
   Engine,
   Schematic,
   SchematicEngine,
+  formats,
 } from '@angular-devkit/schematics';
 import {
   FileSystemCollectionDesc,
   FileSystemSchematicDesc,
-  NodeModulesEngineHost
+  NodeModulesEngineHost,
+  validateOptionsWithSchema
 } from '@angular-devkit/schematics/tools';
 import { SchemaClassFactory } from '@ngtools/json-schema';
-import 'rxjs/add/operator/concatMap';
-import 'rxjs/add/operator/map';
 
 const SilentError = require('silent-error');
 
 const engineHost = new NodeModulesEngineHost();
 const engine: Engine<FileSystemCollectionDesc, FileSystemSchematicDesc>
   = new SchematicEngine(engineHost);
+
+// Add support for schemaJson.
+const registry = new schema.CoreSchemaRegistry(formats.standardFormats);
+engineHost.registerOptionsTransform(validateOptionsWithSchema(registry));
 
 
 export function getEngineHost() {

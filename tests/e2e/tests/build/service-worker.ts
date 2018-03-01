@@ -42,11 +42,16 @@ export default function() {
     .then(() => expectFileToMatch('dist/ngsw.json', /"\/foo\/bar\/index.html"/))
     .then(() => ng('build', '--prod', '--service-worker=false'))
     .then(() => expectFileNotToExist('dist/ngsw.json'))
-    .then(() => ng('eject', '--prod'))
-    .then(() => silentNpm('install'))
-    .then(() => npm('run', 'build'))
-    .then(() => expectFileToMatch('package.json', /"sw-config"/))
-    .then(() => expectFileToExist(join(process.cwd(), 'dist/ngsw-worker.js')))
-    .then(() => expectFileToExist(join(process.cwd(), 'dist/ngsw.json')))
-    .then(() => ng('set', 'apps.0.serviceWorker=false'));
+    .then(() => writeFile('node_modules/@angular/service-worker/safety-worker.js', 'false'))
+    .then(() => ng('build', '--prod'))
+    .then(() => expectFileToExist('dist/safety-worker.js'))
+    .then(() => expectFileToExist('dist/worker-basic.min.js'));
+    // WEBPACK4_DISABLED - eject temporarily disabled for webpack 4 integration
+    // .then(() => ng('eject', '--prod'))
+    // .then(() => silentNpm('install'))
+    // .then(() => npm('run', 'build'))
+    // .then(() => expectFileToMatch('package.json', /"sw-config"/))
+    // .then(() => expectFileToExist(join(process.cwd(), 'dist/ngsw-worker.js')))
+    // .then(() => expectFileToExist(join(process.cwd(), 'dist/ngsw.json')))
+    // .then(() => ng('set', 'apps.0.serviceWorker=false'));
 }

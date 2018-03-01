@@ -1,25 +1,28 @@
-import * as webpack from 'webpack';
 import * as path from 'path';
+import { HashedModuleIdsPlugin } from 'webpack';
 import * as CopyWebpackPlugin from 'copy-webpack-plugin';
-import { NamedLazyChunksWebpackPlugin } from '../../plugins/named-lazy-chunks-webpack-plugin';
 import { extraEntryParser, getOutputHashFormat, AssetPattern } from './utils';
 import { isDirectory } from '../../utilities/is-directory';
 import { requireProjectModule } from '../../utilities/require-project-module';
 import { WebpackConfigOptions } from '../webpack-config';
+import { BundleBudgetPlugin } from '../../plugins/bundle-budget';
+import { CleanCssWebpackPlugin } from '../../plugins/cleancss-webpack-plugin';
 import { ScriptsWebpackPlugin } from '../../plugins/scripts-webpack-plugin';
 
 const ProgressPlugin = require('webpack/lib/ProgressPlugin');
 const CircularDependencyPlugin = require('circular-dependency-plugin');
+const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 const SilentError = require('silent-error');
+const resolve = require('resolve');
 
 /**
  * Enumerate loaders and their dependencies from this file to let the dependency validator
  * know they are used.
  *
- * require('source-map-loader')
  * require('raw-loader')
  * require('url-loader')
  * require('file-loader')
+ * require('cache-loader')
  * require('@angular-devkit/build-optimizer')
  */
 
@@ -30,7 +33,6 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
   const nodeModules = path.resolve(projectRoot, 'node_modules');
 
   let extraPlugins: any[] = [];
-  let extraRules: any[] = [];
   let entryPoints: { [key: string]: string[] } = {};
 
   if (appConfig.main) {
@@ -69,7 +71,7 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
       extraPlugins.push(new ScriptsWebpackPlugin({
         name: script.entry,
         sourceMap: buildOptions.sourcemaps,
-        filename: `${script.entry}${hash}.bundle.js`,
+        filename: `${script.entry}${hash}.js`,
         scripts: script.paths,
         basePath: projectRoot,
       }));
@@ -83,16 +85,21 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
       asset = typeof asset === 'string' ? { glob: asset } : asset;
       // Add defaults.
       // Input is always resolved relative to the appRoot.
-      asset.input = path.resolve(appRoot, asset.input || '');
+      asset.input = path.resolve(appRoot, asset.input || '').replace(/\\/g, '/');
       asset.output = asset.output || '';
       asset.glob = asset.glob || '';
 
       // Prevent asset configurations from writing outside of the output path, except if the user
       // specify a configuration flag.
       // Also prevent writing outside the project path. That is not overridable.
-      const fullOutputPath = path.resolve(buildOptions.outputPath, asset.output);
-      if (!fullOutputPath.startsWith(path.resolve(buildOptions.outputPath))) {
-        if (!fullOutputPath.startsWith(projectRoot)) {
+      const absoluteOutputPath = path.resolve(projectRoot, buildOptions.outputPath);
+      const absoluteAssetOutput = path.resolve(absoluteOutputPath, asset.output);
+      const outputRelativeOutput = path.relative(absoluteOutputPath, absoluteAssetOutput);
+
+      if (outputRelativeOutput.startsWith('..') || path.isAbsolute(outputRelativeOutput)) {
+
+        const projectRelativeOutput = path.relative(projectRoot, absoluteAssetOutput);
+        if (projectRelativeOutput.startsWith('..') || path.isAbsolute(projectRelativeOutput)) {
           const message = 'An asset cannot be written to a location outside the project.';
           throw new SilentError(message);
         }
@@ -106,7 +113,8 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
       }
 
       // Prevent asset configurations from reading files outside of the project.
-      if (!asset.input.startsWith(projectRoot)) {
+      const projectRelativeInput = path.relative(projectRoot, asset.input);
+      if (projectRelativeInput.startsWith('..') || path.isAbsolute(projectRelativeInput)) {
         const message = 'An asset cannot be read from a location outside the project.';
         throw new SilentError(message);
       }
@@ -148,22 +156,29 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
 
   if (buildOptions.showCircularDependencies) {
     extraPlugins.push(new CircularDependencyPlugin({
-      exclude: /(\\|\/)node_modules(\\|\/)/
+      exclude: /[\\\/]node_modules[\\\/]/
     }));
   }
 
+  let buildOptimizerUseRule;
   if (buildOptions.buildOptimizer) {
-    extraRules.push({
-      test: /\.js$/,
-      use: [{
-        loader: '@angular-devkit/build-optimizer/webpack-loader',
-        options: { sourceMap: buildOptions.sourcemaps }
-      }]
-    });
-  }
+    // Set the cache directory to the Build Optimizer dir, so that package updates will delete it.
+    const buildOptimizerDir = path.dirname(
+      resolve.sync('@angular-devkit/build-optimizer', { basedir: projectRoot }));
+    const cacheDirectory = path.resolve(buildOptimizerDir, './.cache/');
 
-  if (buildOptions.namedChunks) {
-    extraPlugins.push(new NamedLazyChunksWebpackPlugin());
+    buildOptimizerUseRule = {
+      use: [
+        {
+          loader: 'cache-loader',
+          options: { cacheDirectory }
+        },
+        {
+          loader: '@angular-devkit/build-optimizer/webpack-loader',
+          options: { sourceMap: buildOptions.sourcemaps }
+        },
+      ],
+    };
   }
 
   // Load rxjs path aliases.
@@ -177,23 +192,34 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
     alias = rxPaths(nodeModules);
   } catch (e) { }
 
+  // Allow loaders to be in a node_modules nested inside the CLI package
+  const loaderNodeModules = ['node_modules'];
+  const potentialNodeModules = path.join(__dirname, '..', '..', 'node_modules');
+  if (isDirectory(potentialNodeModules)) {
+    loaderNodeModules.push(potentialNodeModules);
+  }
+
   return {
+    mode: buildOptions.target,
+    devtool: false,
     resolve: {
       extensions: ['.ts', '.js'],
-      modules: ['node_modules', nodeModules],
       symlinks: !buildOptions.preserveSymlinks,
+      modules: [appRoot, 'node_modules'],
       alias
     },
     resolveLoader: {
-      modules: [nodeModules, 'node_modules']
+      modules: loaderNodeModules
     },
-    context: __dirname,
+    context: projectRoot,
     entry: entryPoints,
     output: {
       path: path.resolve(buildOptions.outputPath),
       publicPath: buildOptions.deployUrl,
-      filename: `[name]${hashFormat.chunk}.bundle.js`,
-      chunkFilename: `[id]${hashFormat.chunk}.chunk.js`
+      filename: `[name]${hashFormat.chunk}.js`,
+    },
+    performance: {
+      hints: false,
     },
     module: {
       rules: [
@@ -213,11 +239,52 @@ export function getCommonConfig(wco: WebpackConfigOptions) {
             name: `[name]${hashFormat.file}.[ext]`,
             limit: 10000
           }
-        }
-      ].concat(extraRules)
+        },
+        {
+          test: /[\/\\]@angular[\/\\].+\.js$/,
+          sideEffects: false,
+          parser: { system: true },
+          ...buildOptimizerUseRule,
+        },
+        {
+          test: /\.js$/,
+          ...buildOptimizerUseRule,
+        },
+      ]
     },
-    plugins: [
-      new webpack.NoEmitOnErrorsPlugin()
-    ].concat(extraPlugins)
+    optimization: {
+      noEmitOnErrors: true,
+      minimizer: [
+        new HashedModuleIdsPlugin(),
+        new BundleBudgetPlugin({ budgets: appConfig.budgets }),
+        new CleanCssWebpackPlugin({
+          sourceMap: buildOptions.sourcemaps,
+          // component styles retain their original file name
+          test: (file) => /\.(?:css|scss|sass|less|styl)$/.test(file),
+        }),
+        new UglifyJSPlugin({
+          sourceMap: buildOptions.sourcemaps,
+          parallel: true,
+          cache: true,
+          uglifyOptions: {
+            ecma: wco.supportES2015 ? 6 : 5,
+            warnings: buildOptions.verbose,
+            safari10: true,
+            compress: {
+              pure_getters: buildOptions.buildOptimizer,
+              // PURE comments work best with 3 passes.
+              // See https://github.com/webpack/webpack/issues/2899#issuecomment-317425926.
+              passes: buildOptions.buildOptimizer ? 3 : 1,
+            },
+            output: {
+              ascii_only: true,
+              comments: false,
+              webkit: true,
+            },
+          }
+        }),
+      ],
+    },
+    plugins: extraPlugins,
   };
 }

@@ -7,14 +7,14 @@ import {
   Schematic,
   Tree
 } from '@angular-devkit/schematics';
+import { BuiltinTaskExecutor } from '@angular-devkit/schematics/tasks/node';
 import { FileSystemHost } from '@angular-devkit/schematics/tools';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs/observable/of';
 import * as path from 'path';
 import chalk from 'chalk';
 import { CliConfig } from '../models/config';
-import 'rxjs/add/operator/concatMap';
-import 'rxjs/add/operator/map';
-import { getCollection, getSchematic } from '../utilities/schematics';
+import { concat, concatMap, ignoreElements, map } from 'rxjs/operators';
+import { getCollection, getSchematic, getEngineHost, getEngine } from '../utilities/schematics';
 
 const { green, red, yellow } = chalk;
 const Task = require('../ember-cli/lib/models/task');
@@ -49,6 +49,20 @@ export default Task.extend({
 
     const ui = this.ui;
 
+    const packageManager = CliConfig.fromGlobal().get('packageManager');
+    const engineHost = getEngineHost();
+    engineHost.registerTaskExecutor(
+      BuiltinTaskExecutor.NodePackage,
+      {
+        rootDirectory: workingDir,
+        packageManager: packageManager === 'default' ? 'npm' : packageManager,
+      },
+    );
+    engineHost.registerTaskExecutor(
+      BuiltinTaskExecutor.RepositoryInitializer,
+      { rootDirectory: workingDir },
+    );
+
     const collection = getCollection(collectionName);
     const schematic = getSchematic(collection, schematicName);
 
@@ -58,7 +72,7 @@ export default Task.extend({
     const opts = { ...taskOptions, ...preppedOptions };
 
     const tree = emptyHost ? new EmptyTree() : new FileSystemTree(new FileSystemHost(workingDir));
-    const host = Observable.of(tree);
+    const host = observableOf(tree);
 
     const dryRunSink = new DryRunSink(workingDir, opts.force);
     const fsSink = new FileSystemSink(workingDir, opts.force);
@@ -111,22 +125,33 @@ export default Task.extend({
     });
 
     return new Promise((resolve, reject) => {
-      schematic.call(opts, host)
-        .map((tree: Tree) => Tree.optimize(tree))
-        .concatMap((tree: Tree) => {
-          return dryRunSink.commit(tree).ignoreElements().concat(Observable.of(tree));
-        })
-        .concatMap((tree: Tree) => {
+      schematic.call(opts, host).pipe(
+        map((tree: Tree) => Tree.optimize(tree)),
+        concatMap((tree: Tree) => {
+          return dryRunSink.commit(tree).pipe(
+            ignoreElements(),
+            concat(observableOf(tree)));
+        }),
+        concatMap((tree: Tree) => {
           if (!error) {
             // Output the logging queue.
             loggingQueue.forEach(log => ui.writeLine(`  ${log.color(log.keyword)} ${log.message}`));
           }
 
           if (opts.dryRun || error) {
-            return Observable.of(tree);
+            return observableOf(tree);
           }
-          return fsSink.commit(tree).ignoreElements().concat(Observable.of(tree));
-        })
+          return fsSink.commit(tree).pipe(
+            ignoreElements(),
+            concat(observableOf(tree)));
+        }),
+        concatMap(() => {
+          if (!opts.dryRun) {
+            return getEngine().executePostTasks();
+          } else {
+            return [];
+          }
+        }))
         .subscribe({
           error(err) {
             ui.writeLine(red(`Error: ${err.message}`));
@@ -168,12 +193,14 @@ export default Task.extend({
 });
 
 function prepOptions(schematic: Schematic<{}, {}>, options: SchematicOptions): SchematicOptions {
+  const properties = (<any>schematic.description).schemaJson
+    ? (<any>schematic.description).schemaJson.properties
+    : options;
 
-  const properties = (<any>schematic.description).schemaJson.properties;
   const keys = Object.keys(properties);
   if (['component', 'c', 'directive', 'd'].indexOf(schematic.description.name) !== -1) {
     options.prefix = (options.prefix === 'false' || options.prefix === '')
-      ? '' : options.prefix;
+      ? undefined : options.prefix;
   }
 
   let preppedOptions = {
