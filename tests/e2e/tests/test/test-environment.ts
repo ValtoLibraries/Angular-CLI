@@ -1,5 +1,6 @@
 import { ng } from '../../utils/process';
 import { writeFile } from '../../utils/fs';
+import { updateJsonFile } from '../../utils/project';
 
 export default function () {
   // Tests run in 'dev' environment by default.
@@ -12,7 +13,20 @@ export default function () {
         });
       });
     `)
-    .then(() => ng('test', '--single-run'))
+    .then(() => ng('test', '--watch=false'))
+    .then(() => updateJsonFile('angular.json', configJson => {
+      const appArchitect = configJson.projects['test-project'].architect;
+      appArchitect.test.configurations = {
+        production: {
+          fileReplacements: [
+            {
+              src: 'src/environments/environment.ts',
+              replaceWith: 'src/environments/environment.prod.ts'
+            }
+          ],
+        }
+      };
+    }))
 
     // Tests can run in different environment.
     .then(() => writeFile('src/app/environment.spec.ts', `
@@ -24,5 +38,5 @@ export default function () {
         });
       });
     `))
-    .then(() => ng('test', '-e', 'prod', '--single-run'));
+    .then(() => ng('test', '--prod', '--watch=false'));
 }

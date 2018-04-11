@@ -26,14 +26,16 @@ export default function () {
         }
       `})
     .then(() => deleteFile('src/app/app.component.css'))
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson['apps'][0];
-      app['styles'] = ['styles.scss'];
+    .then(() => updateJsonFile('angular.json', workspaceJson => {
+      const appArchitect = workspaceJson.projects['test-project'].architect;
+      appArchitect.build.options.styles = [
+        { input: 'src/styles.scss' }
+      ];
     }))
     .then(() => replaceInFile('src/app/app.component.ts',
       './app.component.css', './app.component.scss'))
     .then(() => ng('build'))
-    .then(() => expectToFail(() => expectFileToMatch('dist/styles.css', /exports/)))
-    .then(() => expectToFail(() => expectFileToMatch('dist/main.js',
+    .then(() => expectToFail(() => expectFileToMatch('dist/test-project/styles.css', /exports/)))
+    .then(() => expectToFail(() => expectFileToMatch('dist/test-project/main.js',
       /".*module\.exports.*\.outer.*background:/)));
 }

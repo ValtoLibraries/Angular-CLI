@@ -1,4 +1,3 @@
-import * as fs from 'fs-extra';
 import { join } from 'path';
 import { ng } from '../../../utils/process';
 import { expectFileToExist } from '../../../utils/fs';
@@ -10,7 +9,6 @@ export default function () {
   const testPath = join(root, 'src', 'app');
 
   process.chdir(testPath);
-  fs.mkdirSync('./sub-dir');
 
   return Promise.resolve()
     .then(() =>
@@ -22,6 +20,6 @@ export default function () {
           expectFileToExist(join(testPath, 'sub-dir/child', 'child.spec.ts'))
         ))
         // Try to run the unit tests.
-        .then(() => ng('test', '--single-run'))
+        .then(() => ng('test', '--watch=false'))
     );
 }

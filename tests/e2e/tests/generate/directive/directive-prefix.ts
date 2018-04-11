@@ -8,14 +8,15 @@ export default function() {
   const directiveDir = join('src', 'app');
 
   return Promise.resolve()
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson['apps'][0];
-      app['prefix'] = 'pre';
+    .then(() => updateJsonFile('angular.json', configJson => {
+      configJson.projects['test-project'].schematics = {
+        '@schematics/angular:directive': { prefix: 'pre' }
+      };
     }))
     .then(() => ng('generate', 'directive', 'test-directive'))
     .then(() => expectFileToMatch(join(directiveDir, 'test-directive.directive.ts'),
       /selector: '\[pre/))
 
     // Try to run the unit tests.
-    .then(() => ng('test', '--single-run'));
+    .then(() => ng('test', '--watch=false'));
 }

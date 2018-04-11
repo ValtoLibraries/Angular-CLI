@@ -9,6 +9,8 @@ import { expectToFail } from '../../../utils/utils';
 import { oneLineTrim } from 'common-tags';
 
 export default function () {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   return Promise.resolve()
     .then(() => writeMultipleFiles({
       'src/string-style.css': '.string-style { color: red }',
@@ -17,34 +19,34 @@ export default function () {
       'src/pre-rename-style.css': '.pre-rename-style { color: red }',
       'src/pre-rename-lazy-style.css': '.pre-rename-lazy-style { color: red }'
     }))
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson['apps'][0];
-      app['styles'] = [
-        'string-style.css',
-        { input: 'input-style.css' },
-        { input: 'lazy-style.css', lazy: true },
-        { input: 'pre-rename-style.css', output: 'renamed-style' },
-        { input: 'pre-rename-lazy-style.css', output: 'renamed-lazy-style', lazy: true }
+    .then(() => updateJsonFile('angular.json', workspaceJson => {
+      const appArchitect = workspaceJson.projects['test-project'].architect;
+      appArchitect.build.options.styles = [
+        { input: 'src/string-style.css' },
+        { input: 'src/input-style.css' },
+        { input: 'src/lazy-style.css', lazy: true },
+        { input: 'src/pre-rename-style.css', bundleName: 'renamed-style' },
+        { input: 'src/pre-rename-lazy-style.css', bundleName: 'renamed-lazy-style', lazy: true }
       ];
     }))
     .then(() => ng('build', '--extract-css'))
     // files were created successfully
-    .then(() => expectFileToMatch('dist/styles.css', '.string-style'))
-    .then(() => expectFileToMatch('dist/styles.css', '.input-style'))
-    .then(() => expectFileToMatch('dist/lazy-style.css', '.lazy-style'))
-    .then(() => expectFileToMatch('dist/renamed-style.css', '.pre-rename-style'))
-    .then(() => expectFileToMatch('dist/renamed-lazy-style.css', '.pre-rename-lazy-style'))
+    .then(() => expectFileToMatch('dist/test-project/styles.css', '.string-style'))
+    .then(() => expectFileToMatch('dist/test-project/styles.css', '.input-style'))
+    .then(() => expectFileToMatch('dist/test-project/lazy-style.css', '.lazy-style'))
+    .then(() => expectFileToMatch('dist/test-project/renamed-style.css', '.pre-rename-style'))
+    .then(() => expectFileToMatch('dist/test-project/renamed-lazy-style.css', '.pre-rename-lazy-style'))
     // there are no js entry points for css only bundles
-    .then(() => expectToFail(() => expectFileToExist('dist/style.js')))
-    .then(() => expectToFail(() => expectFileToExist('dist/lazy-style.js')))
-    .then(() => expectToFail(() => expectFileToExist('dist/renamed-style.js')))
-    .then(() => expectToFail(() => expectFileToExist('dist/renamed-lazy-style.js')))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/style.js')))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/lazy-style.js')))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/renamed-style.js')))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/renamed-lazy-style.js')))
     // index.html lists the right bundles
-    .then(() => expectFileToMatch('dist/index.html', new RegExp(oneLineTrim`
+    .then(() => expectFileToMatch('dist/test-project/index.html', new RegExp(oneLineTrim`
       <link rel="stylesheet" href="styles\.css"/?>
       <link rel="stylesheet" href="renamed-style\.css"/?>
     `)))
-    .then(() => expectFileToMatch('dist/index.html', oneLineTrim`
+    .then(() => expectFileToMatch('dist/test-project/index.html', oneLineTrim`
       <script type="text/javascript" src="runtime.js"></script>
       <script type="text/javascript" src="polyfills.js"></script>
       <script type="text/javascript" src="vendor.js"></script>
@@ -53,13 +55,13 @@ export default function () {
     // also check when css isn't extracted
     .then(() => ng('build', '--no-extract-css'))
     // files were created successfully
-    .then(() => expectFileToMatch('dist/styles.js', '.string-style'))
-    .then(() => expectFileToMatch('dist/styles.js', '.input-style'))
-    .then(() => expectFileToMatch('dist/lazy-style.js', '.lazy-style'))
-    .then(() => expectFileToMatch('dist/renamed-style.js', '.pre-rename-style'))
-    .then(() => expectFileToMatch('dist/renamed-lazy-style.js', '.pre-rename-lazy-style'))
+    .then(() => expectFileToMatch('dist/test-project/styles.js', '.string-style'))
+    .then(() => expectFileToMatch('dist/test-project/styles.js', '.input-style'))
+    .then(() => expectFileToMatch('dist/test-project/lazy-style.js', '.lazy-style'))
+    .then(() => expectFileToMatch('dist/test-project/renamed-style.js', '.pre-rename-style'))
+    .then(() => expectFileToMatch('dist/test-project/renamed-lazy-style.js', '.pre-rename-lazy-style'))
     // index.html lists the right bundles
-    .then(() => expectFileToMatch('dist/index.html', oneLineTrim`
+    .then(() => expectFileToMatch('dist/test-project/index.html', oneLineTrim`
       <script type="text/javascript" src="runtime.js"></script>
       <script type="text/javascript" src="polyfills.js"></script>
       <script type="text/javascript" src="styles.js"></script>

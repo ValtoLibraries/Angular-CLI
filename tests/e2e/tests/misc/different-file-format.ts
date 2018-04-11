@@ -10,6 +10,6 @@ const options = {
 export default function() {
   return Promise.resolve()
     .then(() => fs.prependToFile('./src/tsconfig.app.json', '\ufeff', options))
-    .then(() => fs.prependToFile('./.angular-cli.json', '\ufeff', options))
-    .then(() => ng('build', '--env=dev'));
+    .then(() => fs.prependToFile('angular.json', '\ufeff', options))
+    .then(() => ng('build', '--environment=dev'));
 }

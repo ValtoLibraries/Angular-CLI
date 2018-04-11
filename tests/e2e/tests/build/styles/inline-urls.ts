@@ -16,6 +16,8 @@ const imgSvg = `
 `;
 
 export default function () {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   return Promise.resolve()
     .then(() => silentNpm('install', 'font-awesome@4.7.0'))
     .then(() => writeMultipleFiles({
@@ -34,10 +36,12 @@ export default function () {
       'src/assets/small.svg': imgSvg,
       'src/assets/small-id.svg': imgSvg
     }))
-    .then(() => copyProjectAsset('images/spectrum.png', './assets/large.png'))
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson['apps'][0];
-      app['styles'] = ['styles.scss'];
+    .then(() => copyProjectAsset('images/spectrum.png', './src/assets/large.png'))
+    .then(() => updateJsonFile('angular.json', workspaceJson => {
+      const appArchitect = workspaceJson.projects['test-project'].architect;
+      appArchitect.build.options.styles = [
+        { input: 'src/styles.scss' }
+      ];
     }))
     .then(() => ng('build', '--extract-css', '--aot'))
     .then(({ stdout }) => {
@@ -46,18 +50,18 @@ export default function () {
       }
     })
     // Check paths are correctly generated.
-    .then(() => expectFileToMatch('dist/styles.css',
-      /url\(['"]?large\.[0-9a-f]{20}\.png['"]?\),\s+linear-gradient\(to bottom, #0e40fa 25%, #0654f4 75%\);/))
-    .then(() => expectFileToMatch('dist/styles.css',
+    .then(() => expectFileToMatch('dist/test-project/styles.css',
+      /url\(['"]?large\.png['"]?\),\s+linear-gradient\(to bottom, #0e40fa 25%, #0654f4 75%\);/))
+    .then(() => expectFileToMatch('dist/test-project/styles.css',
       /url\(\\?['"]data:image\/svg\+xml/))
-    .then(() => expectFileToMatch('dist/styles.css',
-      /url\(['"]?small-id\.[0-9a-f]{20}\.svg#testID['"]?\)/))
-    .then(() => expectFileToMatch('dist/main.js',
+    .then(() => expectFileToMatch('dist/test-project/styles.css',
+      /url\(['"]?small-id\.svg#testID['"]?\)/))
+    .then(() => expectFileToMatch('dist/test-project/main.js',
       /url\(\\?['"]data:image\/svg\+xml/))
-    .then(() => expectFileToMatch('dist/main.js',
-      /url\((?:['"]|\\')?large\.[0-9a-f]{20}\.png(?:['"]|\\')?\)/))
+    .then(() => expectFileToMatch('dist/test-project/main.js',
+      /url\((?:['"]|\\')?large\.png(?:['"]|\\')?\)/))
     // Check files are correctly created.
-    .then(() => expectToFail(() => expectFileToExist('dist/small.svg')))
-    .then(() => expectFileMatchToExist('./dist', /large\.[0-9a-f]{20}\.png/))
-    .then(() => expectFileMatchToExist('./dist', /small-id\.[0-9a-f]{20}\.svg/));
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/small.svg')))
+    .then(() => expectFileMatchToExist('./dist/test-project', /large\.png/))
+    .then(() => expectFileMatchToExist('./dist/test-project', /small-id\.svg/));
 }

@@ -1,11 +1,11 @@
 import { readFile, writeFile, replaceInFile } from './fs';
-import { execAndWaitForOutputToMatch, silentNpm, ng } from './process';
+import { execAndWaitForOutputToMatch, npm, silentNpm, ng } from './process';
 import { getGlobalVariable } from './env';
 
 const packages = require('../../../lib/packages').packages;
 
 
-const tsConfigPath = 'src/tsconfig.app.json';
+const tsConfigPath = 'tsconfig.json';
 
 
 export function updateJsonFile(filePath: string, fn: (json: any) => any | void) {
@@ -39,13 +39,14 @@ export function createProject(name: string, ...args: string[]) {
     .then(() => ng('new', name, '--skip-install', ...args))
     .then(() => process.chdir(name))
     .then(() => useBuiltPackages())
-    .then(() => useCIChrome())
-    .then(() => useCIDefaults())
+    .then(() => useCIChrome('e2e'))
+    .then(() => useCIChrome('src'))
     .then(() => argv['ng2'] ? useNg2() : Promise.resolve())
     .then(() => argv['ng4'] ? useNg4() : Promise.resolve())
     .then(() => argv.nightly || argv['ng-sha'] ? useSha() : Promise.resolve())
     .then(() => console.log(`Project ${name} created... Installing npm.`))
-    .then(() => silentNpm('install'));
+    .then(() => silentNpm('install'))
+    .then(() => useCIDefaults());
 }
 
 
@@ -121,35 +122,79 @@ export function useSha() {
           json['devDependencies'][`@angular/${pkgName}`]
             = `github:angular/${pkgName}-builds${label}`;
         });
-      json['devDependencies']['typescript'] = '~2.4.0';
     });
   } else {
     return Promise.resolve();
   }
 }
 
-export function useCIDefaults() {
-  return updateJsonFile('.angular-cli.json', configJson => {
-    // Auto-add some flags to ng commands that build or test the app.
-    // --no-progress disables progress logging, which in CI logs thousands of lines.
-    // --no-sourcemaps disables sourcemaps, making builds faster.
-    // We add these flags before other args so that they can be overriden.
-    // e.g. `--no-sourcemaps --sourcemaps` will still generate sourcemaps.
-    const defaults = configJson.defaults;
-    defaults.build = {
-      sourcemaps: false,
-      progress: false
-    };
+export function useNgVersion(version: string) {
+  return updateJsonFile('package.json', json => {
+    // Install over the project with nightly builds.
+    Object.keys(json['dependencies'] || {})
+      .filter(name => name.match(/^@angular\//))
+      .forEach(name => {
+        const pkgName = name.split(/\//)[1];
+        if (pkgName == 'cli') {
+          return;
+        }
+        json['dependencies'][`@angular/${pkgName}`] = version;
+      });
+
+    Object.keys(json['devDependencies'] || {})
+      .filter(name => name.match(/^@angular\//))
+      .forEach(name => {
+        const pkgName = name.split(/\//)[1];
+        if (pkgName == 'cli') {
+          return;
+        }
+        json['devDependencies'][`@angular/${pkgName}`] = version;
+      });
+    // TODO: determine the appropriate version for the Angular version
+    if (version.startsWith('^5')) {
+      json['devDependencies']['typescript'] = '~2.5.0';
+      json['dependencies']['rxjs'] = '5.5.8';
+    } else {
+      json['devDependencies']['typescript'] = '~2.7.0';
+      json['dependencies']['rxjs'] = '6.0.0-rc.0';
+    }
   });
 }
 
-export function useCIChrome() {
+export function useCIDefaults() {
+  return updateJsonFile('angular.json', workspaceJson => {
+    // Disable progress reporting on CI to reduce spam.
+    const appArchitect = workspaceJson.projects['test-project'].architect;
+    appArchitect.build.options.progress = false;
+    appArchitect.test.options.progress = false;
+    // Disable auto-updating webdriver in e2e.
+    const e2eArchitect = workspaceJson.projects['test-project-e2e'].architect;
+    e2eArchitect.e2e.options.webdriverUpdate = false;
+  })
+  .then(() => updateJsonFile('package.json', json => {
+    // We want to always use the same version of webdriver but can only do so on CircleCI.
+    // Appveyor and Travis will use latest Chrome stable.
+    // CircleCI (via ngcontainer:0.1.1) uses Chrome 63.0.3239.84.
+    // Appveyor (via chocolatey) cannot use older versions of Chrome at all:
+    // https://github.com/chocolatey/chocolatey-coreteampackages/tree/master/automatic/googlechrome
+    // webdriver 2.33 matches Chrome 63.0.3239.84.
+    // webdriver 2.37 matches Chrome 65.0.3325.18100 (latest stable).
+    // The webdriver versions for latest stable will need to be manually updated.
+    const webdriverVersion = process.env['CIRCLECI'] ? '2.33' : '2.37';
+    json['scripts']['webdriver-update'] = 'webdriver-manager update' +
+      ` --standalone false --gecko false --versions.chrome ${webdriverVersion}`;
+  }))
+  .then(() => npm('run', 'webdriver-update'));
+}
+
+export function useCIChrome(projectDir: string) {
   // There's a race condition happening in Chrome. Enabling logging in chrome used by
   // protractor actually fixes it. Logging is piped to a file so it doesn't affect our setup.
   // --no-sandbox is needed for Circle CI.
   // Travis can use headless chrome, but not appveyor.
   return Promise.resolve()
-    .then(() => replaceInFile('protractor.conf.js', `'browserName': 'chrome'`,
+    .then(() => replaceInFile(`${projectDir}/protractor.conf.js`,
+      `'browserName': 'chrome'`,
       `'browserName': 'chrome',
         chromeOptions: {
           args: [
@@ -161,7 +206,7 @@ export function useCIChrome() {
     `))
     // Not a problem if the file can't be found.
     .catch(() => null)
-    .then(() => replaceInFile('karma.conf.js', `browsers: ['Chrome'],`,
+    .then(() => replaceInFile(`${projectDir}/karma.conf.js`, `browsers: ['Chrome'],`,
       `browsers: ['ChromeCI'],
       customLaunchers: {
         ChromeCI: {

@@ -5,8 +5,10 @@ import {stripIndents} from 'common-tags';
 
 
 export default function() {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   return updateTsConfig(json => {
-    json['compilerOptions']['baseUrl'] = './';
+    json['compilerOptions']['baseUrl'] = './src';
     json['compilerOptions']['paths'] = {
       '@shared': [
         'app/shared'

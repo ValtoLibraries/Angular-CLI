@@ -1,42 +1,51 @@
-const Command = require('../ember-cli/lib/models/command');
-import { UpdateTask } from '../tasks/update';
+import { CommandScope, Option } from '../models/command';
+import { SchematicCommand, CoreSchematicOptions } from '../models/schematic-command';
 
-export interface UpdateOptions {
+export interface UpdateOptions extends CoreSchematicOptions {
+  next: boolean;
   schematic?: boolean;
 }
 
-const UpdateCommand = Command.extend({
-  name: 'update',
-  description: 'Updates your application.',
-  works: 'everywhere',
-  availableOptions: [
-    {
-      name: 'dry-run',
-      type: Boolean,
-      default: false,
-      aliases: ['d'],
-      description: 'Run through without making any changes.'
-    },
-    {
-      name: 'next',
-      type: Boolean,
-      default: false,
-      description: 'Install the next version, instead of the latest.'
+
+export default class UpdateCommand extends SchematicCommand {
+  public readonly name = 'update';
+  public readonly description = 'Updates your application and its dependencies.';
+  public static aliases: string[] = [];
+  public readonly scope = CommandScope.inProject;
+  public arguments: string[] = [ 'packages' ];
+  public options: Option[] = [
+    // Remove the --force flag.
+    ...this.coreOptions.filter(option => option.name !== 'force'),
+  ];
+  public readonly allowMissingWorkspace = true;
+
+  private collectionName = '@schematics/update';
+  private schematicName = 'update';
+
+  private initialized = false;
+  public async initialize(options: any) {
+    if (this.initialized) {
+      return;
     }
-  ],
+    super.initialize(options);
+    this.initialized = true;
 
-  anonymousOptions: [],
-
-  run: function(commandOptions: any) {
-    const schematic = '@schematics/package-update:all';
-
-    const updateTask = new UpdateTask({
-      ui: this.ui,
-      project: this.project
+    const schematicOptions = await this.getOptions({
+      schematicName: this.schematicName,
+      collectionName: this.collectionName,
     });
-
-    return updateTask.run(schematic, commandOptions);
+    this.options = this.options.concat(schematicOptions.options);
+    this.arguments = this.arguments.concat(schematicOptions.arguments.map(a => a.name));
   }
-});
 
-export default UpdateCommand;
+  public async run(options: UpdateOptions) {
+    return this.runSchematic({
+      collectionName: this.collectionName,
+      schematicName: this.schematicName,
+      schematicOptions: options,
+      dryRun: options.dryRun,
+      force: false,
+      showNothingDone: false,
+    });
+  }
+}

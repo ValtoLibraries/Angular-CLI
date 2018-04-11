@@ -1,15 +1,17 @@
-const Command = require('../ember-cli/lib/models/command');
-import { DocTask } from '../tasks/doc';
+import { Command } from '../models/command';
+import opn from 'opn';
 
-export interface DocOptions {
+export interface Options {
+  keyword: string;
   search?: boolean;
 }
 
-const DocCommand = Command.extend({
-  name: 'doc',
-  description: 'Opens the official Angular API documentation for a given keyword.',
-  works: 'everywhere',
-  availableOptions: [
+export default class DocCommand extends Command {
+  public readonly name = 'doc';
+  public readonly description = 'Opens the official Angular API documentation for a given keyword.';
+  public static aliases = ['d'];
+  public readonly arguments = ['keyword'];
+  public readonly options = [
     {
       name: 'search',
       aliases: ['s'],
@@ -17,22 +19,21 @@ const DocCommand = Command.extend({
       default: false,
       description: 'Search whole angular.io instead of just api.'
     }
-  ],
+  ];
 
-  anonymousOptions: [
-    '<keyword>'
-  ],
-
-  run: function(commandOptions: DocOptions, rawArgs: Array<string>) {
-    const keyword = rawArgs[0];
-
-    const docTask = new DocTask({
-      ui: this.ui,
-      project: this.project
-    });
-
-    return docTask.run(keyword, commandOptions.search);
+  public validate(options: Options) {
+    if (!options.keyword) {
+      this.logger.error(`keyword argument is required.`);
+      return false;
+    }
   }
-});
 
-export default DocCommand;
+  public async run(options: Options) {
+    let searchUrl = `https://angular.io/api?query=${options.keyword}`;
+    if (options.search) {
+      searchUrl = `https://www.google.com/search?q=site%3Aangular.io+${options.keyword}`;
+    }
+
+    return opn(searchUrl, { wait: false });
+  }
+}

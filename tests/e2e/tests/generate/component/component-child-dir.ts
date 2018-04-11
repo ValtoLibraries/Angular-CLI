@@ -8,20 +8,17 @@ export default function() {
   const componentDir = join('src', 'app', subDir, 'test-component');
 
   return Promise.resolve()
-    // .then(() => process.chdir('src/app'))
     .then(() => process.chdir('src'))
     .then(() => process.chdir('app'))
     .then(() => createDir(subDir))
     .then(() => process.chdir(subDir))
-    .then(() => console.log('curent dir: ' + process.cwd()))
     .then(() => ng('generate', 'component', 'test-component'))
     .then(() => process.chdir('../../..'))
-    .then(() => expectFileToExist(componentDir))
     .then(() => expectFileToExist(join(componentDir, 'test-component.component.ts')))
     .then(() => expectFileToExist(join(componentDir, 'test-component.component.spec.ts')))
     .then(() => expectFileToExist(join(componentDir, 'test-component.component.html')))
     .then(() => expectFileToExist(join(componentDir, 'test-component.component.css')))
 
     // Try to run the unit tests.
-    .then(() => ng('test', '--single-run'));
+    .then(() => ng('test', '--watch=false'));
 }

@@ -4,15 +4,17 @@ import {expectToFail} from '../../utils/utils';
 
 
 export default function() {
-  return ng('build', '--sourcemaps')
-    .then(() => expectFileToExist('dist/main.js.map'))
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
 
-    .then(() => ng('build', '--no-sourcemap'))
-    .then(() => expectToFail(() => expectFileToExist('dist/main.js.map')))
+  return ng('build', '--source-map')
+    .then(() => expectFileToExist('dist/test-project/main.js.map'))
 
-    .then(() => ng('build', '--prod', '--output-hashing=none'))
-    .then(() => expectToFail(() => expectFileToExist('dist/main..js.map')))
+    .then(() => ng('build', '--source-map', 'false'))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/main.js.map')))
 
-    .then(() => ng('build', '--prod', '--output-hashing=none', '--sourcemap'))
-    .then(() => expectFileToExist('dist/main.js.map'));
+    .then(() => ng('build', '--optimization', '--output-hashing=none'))
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/main..js.map')))
+
+    .then(() => ng('build', '--optimization', '--output-hashing=none', '--source-map'))
+    .then(() => expectFileToExist('dist/test-project/main.js.map'));
 }

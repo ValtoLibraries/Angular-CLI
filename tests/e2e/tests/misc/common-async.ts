@@ -7,12 +7,14 @@ import {expectToFail} from '../../utils/utils';
 
 
 export default function() {
-  return Promise.resolve();
+  // TODO(architect): The common chunk seems to have a different name in devkit/build-angular.
+  // Investigate, validate, then delete this test.
+  return;
 
   let oldNumberOfFiles = 0;
   return Promise.resolve()
     .then(() => ng('build'))
-    .then(() => oldNumberOfFiles = readdirSync('dist').length)
+    .then(() => oldNumberOfFiles = readdirSync('dist/test-project').length)
     .then(() => ng('generate', 'module', 'lazyA', '--routing'))
     .then(() => ng('generate', 'module', 'lazyB', '--routing'))
     .then(() => prependToFile('src/app/app.module.ts', `
@@ -36,7 +38,7 @@ export default function() {
       console.log(moment);
     `))
     .then(() => ng('build'))
-    .then(() => readdirSync('dist').length)
+    .then(() => readdirSync('dist/test-project').length)
     .then(currentNumberOfDistFiles => {
       if (oldNumberOfFiles != currentNumberOfDistFiles) {
         throw new Error('The build contains a different number of files.');
@@ -47,27 +49,27 @@ export default function() {
       console.log(moment);
     `))
     .then(() => ng('build'))
-    .then(() => expectFileToExist('dist/common.chunk.js'))
-    .then(() => readdirSync('dist').length)
+    .then(() => expectFileToExist('dist/test-project/common.chunk.js'))
+    .then(() => readdirSync('dist/test-project').length)
     .then(currentNumberOfDistFiles => {
       if (oldNumberOfFiles >= currentNumberOfDistFiles) {
         throw new Error(oneLine`The build contains the wrong number of files.
-          The test for 'dist/common.chunk.js' to exist should have failed.`);
+          The test for 'dist/test-project/common.chunk.js' to exist should have failed.`);
       }
       oldNumberOfFiles = currentNumberOfDistFiles;
     })
     .then(() => ng('build', '--no-common-chunk'))
-    .then(() => expectToFail(() => expectFileToExist('dist/common.chunk.js')))
-    .then(() => readdirSync('dist').length)
+    .then(() => expectToFail(() => expectFileToExist('dist/test-project/common.chunk.js')))
+    .then(() => readdirSync('dist/test-project').length)
     .then(currentNumberOfDistFiles => {
       if (oldNumberOfFiles <= currentNumberOfDistFiles) {
         throw new Error(oneLine`The build contains the wrong number of files.
-          The test for 'dist/common.chunk.js' not to exist should have failed.`);
+          The test for 'dist/test-project/common.chunk.js' not to exist should have failed.`);
       }
     })
     // Check for AoT and lazy routes.
     .then(() => ng('build', '--aot'))
-    .then(() => readdirSync('dist').length)
+    .then(() => readdirSync('dist/test-project').length)
     .then(currentNumberOfDistFiles => {
       if (oldNumberOfFiles != currentNumberOfDistFiles) {
         throw new Error('AoT build contains a different number of files.');

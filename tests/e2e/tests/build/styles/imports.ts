@@ -10,6 +10,8 @@ import { updateJsonFile } from '../../../utils/project';
 import { getGlobalVariable } from '../../../utils/env';
 
 export default function () {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   // Disable parts of it in webpack tests.
   const ejected = getGlobalVariable('argv').eject;
 
@@ -38,33 +40,36 @@ export default function () {
           h1 { background: #000; }
         `})
         // change files to use preprocessor
-        .then(() => updateJsonFile('.angular-cli.json', configJson => {
-          const app = configJson['apps'][0];
-          app['styles'] = [`styles.${ext}`];
+        .then(() => updateJsonFile('angular.json', workspaceJson => {
+          const appArchitect = workspaceJson.projects['test-project'].architect;
+          appArchitect.build.options.styles = [
+            { input: `src/styles.${ext}` }
+          ];
         }))
         .then(() => replaceInFile('src/app/app.component.ts',
           './app.component.css', `./app.component.${ext}`))
         // run build app
-        .then(() => ng('build', '--extract-css', '--sourcemap'))
+        .then(() => ng('build', '--extract-css', '--source-map'))
         // verify global styles
-        .then(() => expectFileToMatch('dist/styles.css',
+        .then(() => expectFileToMatch('dist/test-project/styles.css',
           /body\s*{\s*background-color: #00f;\s*}/))
-        .then(() => expectFileToMatch('dist/styles.css',
+        .then(() => expectFileToMatch('dist/test-project/styles.css',
           /p\s*{\s*background-color: #f00;\s*}/))
         // verify global styles sourcemap
         .then(() => expectToFail(() =>
-          expectFileToMatch('dist/styles.css', '"mappings":""')))
+          expectFileToMatch('dist/test-project/styles.css', '"mappings":""')))
         // verify component styles
-        .then(() => expectFileToMatch('dist/main.js',
+        .then(() => expectFileToMatch('dist/test-project/main.js',
           /.outer.*.inner.*background:\s*#[fF]+/))
-        .then(() => expectFileToMatch('dist/main.js',
+        .then(() => expectFileToMatch('dist/test-project/main.js',
           /h1.*background:\s*#000+/))
         // Also check imports work on ng test
-        .then(() => !ejected && ng('test', '--single-run'))
-        // change files back
-        .then(() => updateJsonFile('.angular-cli.json', configJson => {
-          const app = configJson['apps'][0];
-          app['styles'] = ['styles.css'];
+        .then(() => !ejected && ng('test', '--watch=false'))
+        .then(() => updateJsonFile('angular.json', workspaceJson => {
+          const appArchitect = workspaceJson.projects['test-project'].architect;
+          appArchitect.build.options.styles = [
+            { input: `src/styles.css` }
+          ];
         }))
         .then(() => replaceInFile('src/app/app.component.ts',
           `./app.component.${ext}`, './app.component.css'));

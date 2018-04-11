@@ -1,23 +1,17 @@
 import { ng } from '../../../utils/process';
+import { expectToFail } from '../../../utils/utils';
 import { oneLine } from 'common-tags';
 
 export default function () {
   return ng('generate', 'component', 'test-component')
     .then((output) => {
-      if (!output.stdout.match(/update src[\\|\/]app[\\|\/]app.module.ts/)) {
+      // tslint:disable-next-line:max-line-length
+      if (!output.stdout.match(/UPDATE src[\\|\/]app[\\|\/]app.module.ts/)) {
         throw new Error(oneLine`
           Expected to match
-          "update src/app/app.module.ts"
+          "UPDATE src/app.module.ts"
           in ${output.stdout}.`);
       }
     })
-    .then(() => ng('generate', 'component', 'test-component'))
-    .then((output) => {
-      if (!output.stdout.match(/error! src[\\|\/]app[\\|\/]test-component[\\|\/]test-component.component.ts already exists./)) {
-        throw new Error(oneLine`
-          Expected to match
-          "ERROR! src/app/test-component/test-component.ts"
-          in ${output.stdout}.`);
-      }
-    });
+    .then(() => expectToFail(() => ng('generate', 'component', 'test-component')));
 }

@@ -4,6 +4,7 @@ import { writeFile, appendToFile, readFile, replaceInFile } from '../../utils/fs
 import { getGlobalVariable } from '../../utils/env';
 import { expectToFail } from '../../utils/utils';
 
+// tslint:disable:max-line-length
 
 const extraErrors = [
   `Final loader didn't return a Buffer or String`,
@@ -12,6 +13,8 @@ const extraErrors = [
 ];
 
 export default function () {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   if (process.platform.startsWith('win')) {
     return Promise.resolve();
   }

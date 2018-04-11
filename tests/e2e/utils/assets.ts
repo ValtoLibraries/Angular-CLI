@@ -12,7 +12,7 @@ export function assetDir(assetName: string) {
 }
 
 export function copyProjectAsset(assetName: string, to?: string) {
-  const tempRoot = join(getGlobalVariable('tmp-root'), 'test-project', 'src');
+  const tempRoot = join(getGlobalVariable('tmp-root'), 'test-project');
   const sourcePath = assetDir(assetName);
   const targetPath = join(tempRoot, to || assetName);
 

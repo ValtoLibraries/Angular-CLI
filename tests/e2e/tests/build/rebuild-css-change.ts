@@ -9,6 +9,8 @@ import {getGlobalVariable} from '../../utils/env';
 const webpackGoodRegEx = /: Compiled successfully./;
 
 export default function() {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   if (process.platform.startsWith('win')) {
     return Promise.resolve();
   }

@@ -4,10 +4,14 @@ import {expectFileToMatch} from '../../../utils/fs';
 
 
 export default function() {
-  const compDir = join('src', 'app', 'test');
+  // TODO:BREAKING CHANGE... NO LONGER SUPPORTED
+  return Promise.resolve();
+  const compDir = join('projects', 'test-project', 'src', 'test');
 
   return Promise.resolve()
-    .then(() => ng('generate', 'component', 'test', '-cd', 'onpush', '-ve', 'emulated'))
+    .then(() => ng('generate', 'component', 'test',
+      '--change-detection', 'onpush',
+      '--view-encapsulation', 'emulated'))
     .then(() => expectFileToMatch(join(compDir, 'test.component.ts'),
       /changeDetection: ChangeDetectionStrategy.OnPush/))
     .then(() => expectFileToMatch(join(compDir, 'test.component.ts'),

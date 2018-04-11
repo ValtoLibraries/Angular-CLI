@@ -4,6 +4,8 @@ import { expectToFail } from '../../utils/utils';
 import { join } from 'path';
 
 export default function() {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   return ng('generate', 'component', 'i18n-test')
     .then(() => writeFile(
       join('src/app/i18n-test', 'i18n-test.component.html'),

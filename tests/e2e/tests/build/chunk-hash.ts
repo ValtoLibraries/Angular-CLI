@@ -42,6 +42,9 @@ function validateHashes(
 }
 
 export default function() {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+  return;
+
   let oldHashes: Map<string, string>;
   let newHashes: Map<string, string>;
   // First, collect the hashes.

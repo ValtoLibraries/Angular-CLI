@@ -5,20 +5,22 @@ import { updateJsonFile } from '../../../utils/project';
 
 
 export default function() {
-  const componentDir = join('src', 'app', 'test-component');
+  const testCompDir = join('src', 'app', 'test-component');
+  const aliasCompDir = join('src', 'app', 'alias');
 
   return Promise.resolve()
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson['apps'][0];
-      app['prefix'] = 'pre';
+    .then(() => updateJsonFile('angular.json', configJson => {
+      configJson.projects['test-project'].schematics = {
+        '@schematics/angular:component': { prefix: 'pre' }
+      };
     }))
     .then(() => ng('generate', 'component', 'test-component'))
-    .then(() => expectFileToMatch(join(componentDir, 'test-component.component.ts'),
+    .then(() => expectFileToMatch(join(testCompDir, 'test-component.component.ts'),
       /selector: 'pre-/))
     .then(() => ng('g', 'c', 'alias'))
-    .then(() => expectFileToMatch(join('src', 'app', 'alias', 'alias.component.ts'),
+    .then(() => expectFileToMatch(join(aliasCompDir, 'alias.component.ts'),
       /selector: 'pre-/))
 
     // Try to run the unit tests.
-    .then(() => ng('test', '--single-run'));
+    .then(() => ng('test', '--watch=false'));
 }

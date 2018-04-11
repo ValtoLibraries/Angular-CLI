@@ -9,6 +9,8 @@ import {updateJsonFile} from '../../utils/project';
 import {expectToFail} from "../../utils/utils";
 
 export default function() {
+  // TODO(architect): Delete this test. It is now in devkit/build-angular.
+
   // Create an express app that serves as a proxy.
   const app = express();
   const server = http.createServer(app);
@@ -40,30 +42,30 @@ export default function() {
     })
     .then(() => killAllProcesses(), (err) => { killAllProcesses(); throw err; })
 
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson.defaults;
-      app.serve = {
-        proxyConfig: proxyConfigFile
-      };
-    }))
-    .then(() => ngServe())
-    .then(() => request('http://localhost:4200/api/test'))
-    .then(body => {
-      if (!body.match(/TEST_API_RETURN/)) {
-        throw new Error('Response does not match expected value.');
-      }
-    })
-    .then(() => killAllProcesses(), (err) => { killAllProcesses(); throw err; })
+    // .then(() => updateJsonFile('angular.json', configJson => {
+    //   const app = configJson.defaults;
+    //   app.serve = {
+    //     proxyConfig: proxyConfigFile
+    //   };
+    // }))
+    // .then(() => ngServe())
+    // .then(() => request('http://localhost:4200/api/test'))
+    // .then(body => {
+    //   if (!body.match(/TEST_API_RETURN/)) {
+    //     throw new Error('Response does not match expected value.');
+    //   }
+    // })
+    // .then(() => killAllProcesses(), (err) => { killAllProcesses(); throw err; })
 
     .then(() => server.close(), (err) => { server.close(); throw err; })
 
-    // A non-existing proxy file should error.
-    .then(() => expectToFail(() => ng('serve', '--proxy-config', 'proxy.non-existent.json')))
-    .then(() => updateJsonFile('.angular-cli.json', configJson => {
-      const app = configJson.defaults;
-      app.serve = {
-        proxyConfig: 'proxy.non-existent.json'
-      };
-    }))
-    .then(() => expectToFail(() => ng('serve')));
+    // // A non-existing proxy file should error.
+    // .then(() => expectToFail(() => ng('serve', '--proxy-config', 'proxy.non-existent.json')))
+    // .then(() => updateJsonFile('angular.json', configJson => {
+    //   const app = configJson.defaults;
+    //   app.serve = {
+    //     proxyConfig: 'proxy.non-existent.json'
+    //   };
+    // }))
+    // .then(() => expectToFail(() => ng('serve')));
 }
