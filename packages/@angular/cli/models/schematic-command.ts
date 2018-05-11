@@ -6,6 +6,7 @@ import { NodeWorkflow } from '@angular-devkit/schematics/tools';
 import { DryRunEvent, UnsuccessfulWorkflowExecution } from '@angular-devkit/schematics';
 import { getPackageManager, getDefaultSchematicCollection } from '../utilities/config';
 import { getCollection, getSchematic } from '../utilities/schematics';
+import { getSchematicDefaults } from '../utilities/config';
 import { take } from 'rxjs/operators';
 import { WorkspaceLoader } from '../models/workspace-loader';
 
@@ -83,7 +84,8 @@ export abstract class SchematicCommand extends Command {
     const { collectionName, schematicName, debug, force, dryRun } = options;
     let schematicOptions = this.removeCoreOptions(options.schematicOptions);
     let nothingDone = true;
-    const loggingQueue: string[] = [];
+    let loggingQueue: string[] = [];
+    let error = false;
     const fsHost = new virtualFs.ScopedHost(new NodeJsSyncHost(), normalize(this.project.root));
     const workflow = new NodeWorkflow(
       fsHost as any,
@@ -95,8 +97,7 @@ export abstract class SchematicCommand extends Command {
        },
     );
 
-    const cwd = process.env.PWD;
-    const workingDir = cwd.replace(this.project.root, '').replace(/\\/g, '/');
+    const workingDir = process.cwd().replace(this.project.root, '').replace(/\\/g, '/');
     const pathOptions = this.setPathOptions(schematicOptions, workingDir);
     schematicOptions = { ...schematicOptions, ...pathOptions };
     const defaultOptions = this.readDefaults(collectionName, schematicName, schematicOptions);
@@ -114,6 +115,14 @@ export abstract class SchematicCommand extends Command {
     });
     delete schematicOptions._;
 
+    workflow.registry.addSmartDefaultProvider('projectName', (_schema: JsonObject) => {
+      if (this._workspace) {
+        return this._workspace.getProjectByPath(normalize(process.cwd()))
+               || this._workspace.getDefaultProjectName();
+      }
+      return undefined;
+    });
+
     workflow.reporter.subscribe((event: DryRunEvent) => {
       nothingDone = false;
 
@@ -122,6 +131,7 @@ export abstract class SchematicCommand extends Command {
 
       switch (event.kind) {
         case 'error':
+          error = true;
           const desc = event.description == 'alreadyExist' ? 'already exists' : 'does not exist.';
           this.logger.warn(`ERROR! ${eventPath} ${desc}.`);
           break;
@@ -144,7 +154,19 @@ export abstract class SchematicCommand extends Command {
       }
     });
 
-    return new Promise((resolve, reject) => {
+    workflow.lifeCycle.subscribe(event => {
+      if (event.kind == 'end' || event.kind == 'post-tasks-start') {
+        if (!error) {
+          // Output the logging queue, no error happened.
+          loggingQueue.forEach(log => this.logger.info(log));
+        }
+
+        loggingQueue = [];
+        error = false;
+      }
+    });
+
+    return new Promise<number | void>((resolve) => {
       workflow.execute({
         collection: collectionName,
         schematic: schematicName,
@@ -165,12 +187,9 @@ export abstract class SchematicCommand extends Command {
             this.logger.fatal(err.message);
           }
 
-          reject(1);
+          resolve(1);
         },
         complete: () => {
-          // Output the logging queue, no error happened.
-          loggingQueue.forEach(log => this.logger.info(log));
-
           const showNothingDone = !(options.showNothingDone === false);
           if (nothingDone && showNothingDone) {
             this.logger.info('Nothing to be done.');
@@ -294,7 +313,7 @@ export abstract class SchematicCommand extends Command {
     const workspaceLoader = new WorkspaceLoader(this._host);
 
     try {
-      workspaceLoader.loadWorkspace().pipe(take(1))
+      workspaceLoader.loadWorkspace(this.project.root).pipe(take(1))
         .subscribe(
           (workspace: experimental.workspace.Workspace) => this._workspace = workspace,
           (err: Error) => {
@@ -312,48 +331,23 @@ export abstract class SchematicCommand extends Command {
     }
   }
 
-  private readDefaults(collectionName: string, schematicName: string, options: any): any {
-    let defaults: any = {};
+  private _cleanDefaults<T, K extends keyof T>(defaults: T, undefinedOptions: string[]): T {
+    (Object.keys(defaults) as K[])
+      .filter(key => !undefinedOptions.map(strings.camelize).includes(key))
+      .forEach(key => {
+        delete defaults[key];
+      });
 
-    if (!this._workspace) {
-      return {};
-    }
+    return defaults;
+  }
 
+  private readDefaults(collectionName: string, schematicName: string, options: any): {} {
     if (this._deAliasedName) {
       schematicName = this._deAliasedName;
     }
 
-    // read and set workspace defaults
-    const wsSchematics = this._workspace.getSchematics();
-    if (wsSchematics) {
-      let key = collectionName;
-      if (wsSchematics[key] && typeof wsSchematics[key] === 'object') {
-        defaults = {...defaults, ...<object> wsSchematics[key]};
-      }
-      key = collectionName + ':' + schematicName;
-      if (wsSchematics[key] && typeof wsSchematics[key] === 'object') {
-        defaults = {...defaults, ...<object> wsSchematics[key]};
-      }
-    }
-
-    // read and set project defaults
-    let projectName = options.project;
-    if (!projectName) {
-      projectName = this._workspace.listProjectNames()[0];
-    }
-    if (projectName) {
-      const prjSchematics = this._workspace.getProjectSchematics(projectName);
-      if (prjSchematics) {
-        let key = collectionName;
-        if (prjSchematics[key] && typeof prjSchematics[key] === 'object') {
-          defaults = {...defaults, ...<object> prjSchematics[key]};
-        }
-        key = collectionName + ':' + schematicName;
-        if (prjSchematics[key] && typeof prjSchematics[key] === 'object') {
-          defaults = {...defaults, ...<object> prjSchematics[key]};
-        }
-      }
-    }
+    const projectName = options.project;
+    const defaults = getSchematicDefaults(collectionName, schematicName, projectName);
 
     // Get list of all undefined options.
     const undefinedOptions = this.options
@@ -361,11 +355,7 @@ export abstract class SchematicCommand extends Command {
       .map(o => o.name);
 
     // Delete any default that is not undefined.
-    Object.keys(defaults)
-      .filter(key => !undefinedOptions.indexOf(key))
-      .forEach(key => {
-        delete defaults[key];
-      });
+    this._cleanDefaults(defaults, undefinedOptions);
 
     return defaults;
   }
