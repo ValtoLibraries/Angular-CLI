@@ -1,10 +1,8 @@
-import { SemVer, satisfies } from 'semver';
 import { tags, terminal } from '@angular-devkit/core';
 import * as path from 'path';
+import { SemVer, satisfies } from 'semver';
 import { isWarningEnabled } from '../utilities/config';
 import { requireProjectModule } from '../utilities/require-project-module';
-
-const resolve = require('resolve');
 
 
 export class Version {
@@ -31,28 +29,6 @@ export class Version {
 
   toString() { return this._version; }
 
-  static fromProject(): Version {
-    let packageJson: any = null;
-
-    try {
-      const angularCliPath = resolve.sync('@angular/cli', {
-        basedir: process.cwd(),
-        packageFilter: (pkg: any, _pkgFile: string) => {
-          return packageJson = pkg;
-        }
-      });
-      if (angularCliPath && packageJson) {
-        try {
-          return new Version(packageJson.version);
-        } catch {
-          return new Version(null);
-        }
-      }
-    } catch {
-      return new Version(null);
-    }
-  }
-
   static assertCompatibleAngularVersion(projectRoot: string) {
     let angularPkgJson;
     let rxjsPkgJson;
@@ -74,11 +50,12 @@ export class Version {
       process.exit(2);
     }
 
-    let angularVersion = new Version(angularPkgJson['version']);
-    let rxjsVersion = new Version(rxjsPkgJson['version']);
+    const angularVersion = new Version(angularPkgJson['version']);
+    const rxjsVersion = new Version(rxjsPkgJson['version']);
 
     if (angularVersion.isLocal()) {
       console.warn(terminal.yellow('Using a local version of angular. Proceeding with care...'));
+
       return;
     }
 

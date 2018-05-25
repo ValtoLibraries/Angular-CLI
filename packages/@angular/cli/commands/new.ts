@@ -1,6 +1,6 @@
 import { CommandScope, Option } from '../models/command';
-import { getDefaultSchematicCollection } from '../utilities/config';
 import { SchematicCommand } from '../models/schematic-command';
+import { getDefaultSchematicCollection } from '../utilities/config';
 
 
 export default class NewCommand extends SchematicCommand {
@@ -18,15 +18,16 @@ export default class NewCommand extends SchematicCommand {
       type: Boolean,
       default: false,
       aliases: ['v'],
-      description: 'Adds more details to output logging.'
+      description: 'Adds more details to output logging.',
     },
     {
       name: 'collection',
       type: String,
       aliases: ['c'],
-      description: 'Schematics collection to use.'
-    }
+      description: 'Schematics collection to use.',
+    },
   ];
+  private schematicName = 'ng-new';
 
   private initialized = false;
   public initialize(options: any) {
@@ -37,11 +38,10 @@ export default class NewCommand extends SchematicCommand {
     this.initialized = true;
 
     const collectionName = this.parseCollectionName(options);
-    const schematicName = 'application';
 
     return this.getOptions({
-        schematicName,
-        collectionName
+        schematicName: this.schematicName,
+        collectionName,
       })
       .then((schematicOptions) => {
         this.options = this.options.concat(schematicOptions.options);
@@ -75,11 +75,11 @@ export default class NewCommand extends SchematicCommand {
 
     return this.runSchematic({
       collectionName: collectionName,
-      schematicName: 'ng-new',
+      schematicName: this.schematicName,
       schematicOptions: options,
       debug: options.debug,
       dryRun: options.dryRun,
-      force: options.force
+      force: options.force,
     });
   }
 
