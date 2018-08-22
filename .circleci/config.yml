@@ -1,0 +1,156 @@
+version: 2
+
+_defaults: &defaults
+  working_directory: ~/ng
+  docker:
+    - image: angular/ngcontainer:0.3.3
+
+_post_checkout: &post_checkout
+  post: git pull --ff-only origin "refs/pull/${CI_PULL_REQUEST//*pull\//}/merge"
+
+_root_package_lock_key: &root_package_lock_key
+  key: angular_devkit-{{ checksum "yarn.lock" }}-0.3.3-2
+
+_attach_options: &attach_options
+  at: .
+
+jobs:
+  install:
+    <<: *defaults
+    steps:
+      - checkout: *post_checkout
+      - restore_cache: *root_package_lock_key
+      - run: yarn install --frozen-lockfile
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./*
+      - save_cache:
+          <<: *root_package_lock_key
+          paths:
+            - ~/.cache/yarn
+  
+  lint:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm run lint
+
+  validate:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm run validate -- --ci
+
+  test:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm run test -- --code-coverage --full
+
+  test-large:
+    <<: *defaults
+    resource_class: large
+    parallelism: 4
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm run webdriver-update-circleci
+      - run: npm run test-large -- --code-coverage --full --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
+
+  e2e-cli:
+    <<: *defaults
+    environment:
+      BASH_ENV: ~/.profile
+    resource_class: xlarge
+    parallelism: 4
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm install --global npm@6
+      - run: xvfb-run -a node ./tests/legacy-cli/run_e2e --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
+
+  build:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm run admin -- build
+
+  build-bazel:
+    <<: *defaults
+    resource_class: large
+    steps:
+      - attach_workspace: *attach_options
+      - run: sudo cp .circleci/bazel.rc /etc/bazel.bazelrc
+      - run: bazel build //packages/...
+
+  snapshot_publish:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run:
+          name: Decrypt Credentials
+          command: |
+            openssl aes-256-cbc -d -in .circleci/github_token -k "${KEY}" -out ~/github_token
+      - run:
+          name: Deployment to Snapshot
+          command: |
+            npm run admin -- snapshots --verbose --githubTokenFile=${HOME}/github_token
+
+  publish:
+    <<: *defaults
+    steps:
+      - attach_workspace: *attach_options
+      - run:
+          name: Decrypt Credentials
+          command: |
+            openssl aes-256-cbc -d -in .circleci/npm_token -k "${KEY}" -out ~/.npmrc
+      - run:
+          name: Deployment to NPM
+          command: |
+            npm run admin -- publish --verbose
+
+workflows:
+  version: 2
+  default_workflow:
+    jobs:
+      - install
+      - lint:
+          requires:
+            - install
+      - validate:
+          requires:
+            - install
+      - build:
+          requires:
+            - lint
+            - validate
+      - build-bazel:
+          requires:
+            - lint
+            - validate
+      - test:
+          requires:
+            - build
+      - test-large:
+          requires:
+            - build
+      - e2e-cli:
+          requires:
+            - build
+      - snapshot_publish:
+          requires:
+            - test
+            - build
+            - e2e-cli
+          filters:
+            branches:
+              only: master
+      - publish:
+          requires:
+            - test
+            - build
+            - snapshot_publish
+          filters:
+            tags:
+              only: /^v\d+/
+            branches:
+              ignore: /.*/

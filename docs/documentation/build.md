@@ -113,7 +113,7 @@ See https://github.com/angular/angular-cli/issues/7797 for details.
     <code>--optimization</code>
   </p>
   <p>
-    Defines the optimization level of the build.
+    Enables optimization of the build output.
   </p>
 </details>
 <details>
@@ -150,6 +150,15 @@ See https://github.com/angular/angular-cli/issues/7797 for details.
   </p>
   <p>
     Output in-file eval sourcemaps.
+  </p>
+</details>
+<details>
+  <summary>vendor-source-map</summary>
+  <p>
+    <code>--vendor-source-map</code>
+  </p>
+  <p>
+    Resolve vendor packages sourcemaps.
   </p>
 </details>
 <details>
@@ -383,7 +392,7 @@ See https://github.com/angular/angular-cli/issues/7797 for details.
     <code>--stats-json</code>
   </p>
   <p>
-    Generates a 'stats.json' file which can be analyzed using tools such as: <a href="https://github.com/webpack-contrib/webpack-bundle-analyzer">webpack-bundle-analyzer</a> or <a href="https://webpack.github.io/analyse">webpack.github.io/analyse</a>.
+    Generates a 'stats.json' file which can be analyzed using tools such as: #webpack-bundle-analyzer' or https: //webpack.github.io/analyse.
   </p>
 </details>
 <details>

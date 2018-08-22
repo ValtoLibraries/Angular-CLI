@@ -178,7 +178,7 @@ ng serve [project]
     <code>--optimization</code>
   </p>
   <p>
-    Defines the optimization level of the build.
+    Enables optimization of the build output.
   </p>
 </details>
 <details>
@@ -206,6 +206,15 @@ ng serve [project]
   </p>
   <p>
     Output in-file eval sourcemaps.
+  </p>
+</details>
+<details>
+  <summary>vendor-source-map</summary>
+  <p>
+    <code>--vendor-source-map</code>
+  </p>
+  <p>
+    Resolve vendor packages sourcemaps.
   </p>
 </details>
 <details>
