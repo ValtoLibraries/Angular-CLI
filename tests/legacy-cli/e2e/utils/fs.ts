@@ -107,6 +107,10 @@ export function copyFile(from: string, to: string) {
     }));
 }
 
+export function moveDirectory(from: string, to: string) {
+  return fs.move(from, to, { overwrite: true });
+}
+
 
 export function writeMultipleFiles(fs: { [path: string]: string }) {
   return Promise.all(Object.keys(fs).map(fileName => writeFile(fileName, fs[fileName])));
@@ -188,11 +192,16 @@ export function expectFileToMatch(fileName: string, regEx: RegExp | string) {
     });
 }
 
-export function expectFileSizeToBeUnder(fileName: string, sizeInBytes: number) {
-  return readFile(fileName)
-    .then(content => {
-      if (content.length > sizeInBytes) {
-        throw new Error(`File "${fileName}" exceeded file size of "${sizeInBytes}".`);
-      }
-    });
+export async function getFileSize(fileName: string) {
+  const stats = await fs.stat(fileName);
+
+  return stats.size;
+}
+
+export async function expectFileSizeToBeUnder(fileName: string, sizeInBytes: number) {
+  const fileSize = await getFileSize(fileName);
+
+  if (fileSize > sizeInBytes) {
+    throw new Error(`File "${fileName}" exceeded file size of "${sizeInBytes}".`);
+  }
 }

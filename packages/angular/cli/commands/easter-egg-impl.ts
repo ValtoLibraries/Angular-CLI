@@ -8,13 +8,14 @@
 
 import { terminal } from '@angular-devkit/core';
 import { Command } from '../models/command';
+import { Schema as AwesomeCommandSchema } from './easter-egg';
 
 function pickOne(of: string[]): string {
   return of[Math.floor(Math.random() * of.length)];
 }
 
-export class AwesomeCommand extends Command {
-  run() {
+export class AwesomeCommand extends Command<AwesomeCommandSchema> {
+  async run() {
     const phrase = pickOne([
       `You're on it, there's nothing for me to do!`,
       `Let's take a look... nope, it's all good!`,

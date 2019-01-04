@@ -5,100 +5,86 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-// tslint:disable
-// TODO: cleanup this file, it's copied as is from Angular CLI.
-
-import * as path from 'path';
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const SubresourceIntegrityPlugin = require('webpack-subresource-integrity');
 import { LicenseWebpackPlugin } from 'license-webpack-plugin';
-import { generateEntryPoints, packageChunkSort } from '../../utilities/package-chunk-sort';
-import { BaseHrefWebpackPlugin } from '../../lib/base-href-webpack';
+import * as path from 'path';
 import { IndexHtmlWebpackPlugin } from '../../plugins/index-html-webpack-plugin';
-import { ExtraEntryPoint } from '../../../browser/schema';
-import { BrowserBuilderSchema } from '../../../browser/schema';
+import { generateEntryPoints } from '../../utilities/package-chunk-sort';
 import { WebpackConfigOptions } from '../build-options';
-import { normalizeExtraEntryPoints } from './utils';
+import { getSourceMapDevTool, normalizeExtraEntryPoints } from './utils';
 
-/**
-+ * license-webpack-plugin has a peer dependency on webpack-sources, list it in a comment to
-+ * let the dependency validator know it is used.
-+ *
-+ * require('webpack-sources')
-+ */
+const SubresourceIntegrityPlugin = require('webpack-subresource-integrity');
+
 
 export function getBrowserConfig(wco: WebpackConfigOptions) {
-  const { root, projectRoot, buildOptions } = wco;
+  const { root, buildOptions } = wco;
+  const extraPlugins = [];
 
+  let isEval = false;
+  const { styles: stylesOptimization, scripts: scriptsOptimization } = buildOptions.optimization;
+  const {
+    styles: stylesSourceMap,
+    scripts: scriptsSourceMap,
+    hidden: hiddenSourceMap,
+  } = buildOptions.sourceMap;
 
-  let extraPlugins: any[] = [];
-
-  // Figure out which are the lazy loaded bundle names.
-  const lazyChunkBundleNames = normalizeExtraEntryPoints(
-    // We don't really need a default name because we pre-filtered by lazy only entries.
-    [...buildOptions.styles, ...buildOptions.scripts], 'not-lazy')
-    .filter(entry => entry.lazy)
-    .map(entry => entry.bundleName)
-
-  const generateIndexHtml = false;
-  if (generateIndexHtml) {
-    extraPlugins.push(new HtmlWebpackPlugin({
-      template: path.resolve(root, buildOptions.index),
-      filename: path.resolve(buildOptions.outputPath, buildOptions.index),
-      chunksSortMode: packageChunkSort(buildOptions),
-      excludeChunks: lazyChunkBundleNames,
-      xhtml: true,
-      minify: buildOptions.optimization ? {
-        caseSensitive: true,
-        collapseWhitespace: true,
-        keepClosingSlash: true
-      } : false
-    }));
-    extraPlugins.push(new BaseHrefWebpackPlugin({
-      baseHref: buildOptions.baseHref as string
-    }));
+  // See https://webpack.js.org/configuration/devtool/ for sourcemap types.
+  if ((stylesSourceMap || scriptsSourceMap) &&
+    buildOptions.evalSourceMap &&
+    !stylesOptimization &&
+    !scriptsOptimization) {
+    // Produce eval sourcemaps for development with serve, which are faster.
+    isEval = true;
   }
 
-  let sourcemaps: string | false = false;
-  if (buildOptions.sourceMap) {
-    // See https://webpack.js.org/configuration/devtool/ for sourcemap types.
-    if (buildOptions.evalSourceMap && !buildOptions.optimization) {
-      // Produce eval sourcemaps for development with serve, which are faster.
-      sourcemaps = 'eval';
-    } else {
-      // Produce full separate sourcemaps for production.
-      sourcemaps = 'source-map';
-    }
+  if (buildOptions.index) {
+    extraPlugins.push(new IndexHtmlWebpackPlugin({
+      input: path.resolve(root, buildOptions.index),
+      output: path.basename(buildOptions.index),
+      baseHref: buildOptions.baseHref,
+      entrypoints: generateEntryPoints(buildOptions),
+      deployUrl: buildOptions.deployUrl,
+      sri: buildOptions.subresourceIntegrity,
+    }));
   }
 
   if (buildOptions.subresourceIntegrity) {
     extraPlugins.push(new SubresourceIntegrityPlugin({
-      hashFuncNames: ['sha384']
+      hashFuncNames: ['sha384'],
     }));
   }
 
   if (buildOptions.extractLicenses) {
     extraPlugins.push(new LicenseWebpackPlugin({
-      pattern: /.*/,
-      suppressErrors: true,
+      stats: {
+        warnings: false,
+        errors: false,
+      },
       perChunkOutput: false,
-      outputFilename: `3rdpartylicenses.txt`
+      outputFilename: `3rdpartylicenses.txt`,
     }));
+  }
+
+  if (!isEval && (scriptsSourceMap || stylesSourceMap)) {
+    extraPlugins.push(getSourceMapDevTool(
+      scriptsSourceMap,
+      stylesSourceMap,
+      hiddenSourceMap,
+    ));
   }
 
   const globalStylesBundleNames = normalizeExtraEntryPoints(buildOptions.styles, 'styles')
     .map(style => style.bundleName);
 
   return {
-    devtool: sourcemaps,
+    devtool: isEval ? 'eval' : false,
     resolve: {
       mainFields: [
         ...(wco.supportES2015 ? ['es2015'] : []),
-        'browser', 'module', 'main'
-      ]
+        'browser', 'module', 'main',
+      ],
     },
     output: {
-      crossOriginLoading: buildOptions.subresourceIntegrity ? 'anonymous' : false
+      crossOriginLoading: buildOptions.subresourceIntegrity ? 'anonymous' : false,
     },
     optimization: {
       runtimeChunk: 'single',
@@ -122,26 +108,18 @@ export function getBrowserConfig(wco: WebpackConfigOptions) {
             name: 'vendor',
             chunks: 'initial',
             enforce: true,
-            test: (module: any, chunks: Array<{ name: string }>) => {
+            test: (module: { nameForCondition?: Function }, chunks: Array<{ name: string }>) => {
               const moduleName = module.nameForCondition ? module.nameForCondition() : '';
+
               return /[\\/]node_modules[\\/]/.test(moduleName)
                 && !chunks.some(({ name }) => name === 'polyfills'
                   || globalStylesBundleNames.includes(name));
             },
           },
-        }
-      }
+        },
+      },
     },
-    plugins: extraPlugins.concat([
-      new IndexHtmlWebpackPlugin({
-        input: path.resolve(root, buildOptions.index),
-        output: path.basename(buildOptions.index),
-        baseHref: buildOptions.baseHref,
-        entrypoints: generateEntryPoints(buildOptions),
-        deployUrl: buildOptions.deployUrl,
-        sri: buildOptions.subresourceIntegrity,
-      }),
-    ]),
+    plugins: extraPlugins,
     node: false,
   };
 }

@@ -12,13 +12,17 @@ to follow:
  - [Coding Rules](#rules)
  - [Commit Message Guidelines](#commit)
  - [Signing the CLA](#cla)
+ - [Updating the Public API](#public-api)
 
 ## <a name="coc"></a> Code of Conduct
 Help us keep Angular open and inclusive. Please read and follow our [Code of Conduct][coc].
 
 ## <a name="question"></a> Got a Question or Problem?
 
-Please, do not open issues for the general support questions as we want to keep GitHub issues for bug reports and feature requests. You've got much better chances of getting your question answered on [StackOverflow](https://stackoverflow.com/questions/tagged/angular-devkit) where the questions should be tagged with tag `angular-devkit`.
+Please, do not open issues for the general support questions as we want to keep GitHub issues for
+bug reports and feature requests. You've got much better chances of getting your question answered
+on [StackOverflow](https://stackoverflow.com/questions/tagged/angular-devkit) where the questions
+should be tagged with tag `angular-cli` or `angular-devkit`.
 
 StackOverflow is a much better place to ask questions since:
 
@@ -26,7 +30,8 @@ StackOverflow is a much better place to ask questions since:
 - questions and answers stay available for public viewing so your question / answer might help someone else
 - StackOverflow's voting system assures that the best answers are prominently visible.
 
-To save your and our time we will be systematically closing all the issues that are requests for general support and redirecting people to StackOverflow.
+To save your and our time we will be systematically closing all the issues that are requests for
+general support and redirecting people to StackOverflow.
 
 If you would like to chat about the question in real-time, you can reach out via [our gitter channel][gitter].
 
@@ -180,40 +185,64 @@ If the commit reverts a previous commit, it should begin with `revert: `, follow
 ### Type
 Must be one of the following:
 
-* **build**: Changes that affect the build system or external dependencies
-* **ci**: Changes to our CI configuration files and scripts
-* **docs**: Documentation only changes
-* **feat**: A new feature
-* **fix**: A bug fix
-* **perf**: A code change that improves performance
-* **refactor**: A code change that neither fixes a bug nor adds a feature
-* **style**: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
-* **test**: Adding missing tests or correcting existing tests
+* **build**: Changes that affect the build system or external dependencies. [2]
+* **ci**: Changes to our CI configuration files and scripts. [2]
+* **docs**: Documentation only changes. 
+* **feat**: A new feature. [1]
+* **fix**: A bug fix. [1]
+* **refactor**: A code change that neither fixes a bug nor adds a feature 
+* **release**: A release commit. Must only include version changes. [2]
+* **revert**: A git commit revert. The description must include the original commit message. [2]
+* **style**: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc). 
+* **test**: Adding missing tests or correcting existing tests. 
+
+
+<sup>[1] This type MUST have a scope. See the next section for more information.</sup><br/>
+<sup>[2] This type MUST NOT have a scope. It only applies to general scripts and tooling.</sup>
 
 ### Scope
 The scope should be the name of the npm package affected as perceived by the person reading changelog generated from the commit messages.
 
 The following is the list of supported scopes:
 
-* **@angular-devkit/core**
+* **@angular/cli**
+* **@angular/pwa**
+* **@angular-devkit/architect**
+* **@angular-devkit/architect-cli**
+* **@angular-devkit/build-angular**
+* **@angular-devkit/build-ng-packagr**
 * **@angular-devkit/build-optimizer**
+* **@angular-devkit/build-webpack**
+* **@angular-devkit/core**
 * **@angular-devkit/schematics**
 * **@angular-devkit/schematics-cli**
+* **@ngtools/webpack**
 * **@schematics/angular**
 * **@schematics/schematics**
+* **@schematics/update**
 
-There are currently a few exceptions to the "use package name" rule:
-
-* **packaging**: used for changes that change the npm package layout in all of our packages, e.g. public path changes, package.json changes done to all packages, d.ts file/format changes, changes to bundles, etc.
-* **changelog**: used for updating the release notes in CHANGELOG.md
-* none/empty string: useful for `style`, `test` and `refactor` changes that are done across all packages (e.g. `style: add missing semicolons`)
 
 ### Subject
 The subject contains succinct description of the change:
 
 * use the imperative, present tense: "change" not "changed" nor "changes"
 * don't capitalize first letter
+* be concise and direct
 * no dot (.) at the end
+
+### Examples
+Examples of valid commit messages:
+
+* `fix(@angular/cli): prevent the flubber from grassing`
+* `refactor(@schematics/angular): move all JSON classes together`
+
+Examples of invalid commit messages:
+* `fix(@angular/cli): add a new XYZ command`
+
+  This is a feature, not a fix.
+* `ci(@angular/cli): fix publishing workflow`
+
+  The `ci` type cannot have a scope.
 
 ### Body
 Just as in the **subject**, use the imperative, present tense: "change" not "changed" nor "changes".
@@ -240,9 +269,44 @@ changes to be accepted, the CLA must be signed. It's a quick process, we promise
 [coc]: https://github.com/angular/code-of-conduct/blob/master/CODE_OF_CONDUCT.md
 [commit-message-format]: https://docs.google.com/document/d/1QrDFcIiPjSLDn3EL15IJygNPiHORgU1_OOAqWjiDU5Y/edit#
 [corporate-cla]: http://code.google.com/legal/corporate-cla-v1.0.html
-[dev-doc]: ttps://github.com/angular/angular-cli/blob/master/packages/angular/cli/README.md#development-hints-for-working-on-angular-cli
+[dev-doc]: https://github.com/angular/angular-cli/blob/master/packages/angular/cli/README.md#development-hints-for-working-on-angular-cli
 [GitHub]: https://github.com/angular/angular-cli
 [gitter]: https://gitter.im/angular/angular-cli
 [individual-cla]: http://code.google.com/legal/individual-cla-v1.0.html
 [js-style-guide]: https://google.github.io/styleguide/jsguide.html
 [stackoverflow]: http://stackoverflow.com/questions/tagged/angular-devkit
+
+## <a name="public-api"></a> Updating the Public API
+Our Public API is protected with TS API Guardian. This is a tool that keeps track of public API surface of our packages.
+
+To test if your change effect the public API you need to run the API guardian on that particular package.
+
+For example in case `@angular-devkit/core` package was modified you need to run:
+
+```bash
+bazel test //etc/api:angular_devkit_core_api
+```
+
+You can also test all packages by running:
+```bash
+bazel test //etc/api ...
+```
+
+If you modified the public API, the test will fail. To update the golden files you need to run:
+
+```bash
+bazel run //etc/api:angular_devkit_core_api.accept
+```
+
+**Note**: In some cases we use aliased symbols to create namespaces.
+
+Example:
+```javascript 
+import * as foo from './foo';
+
+export { foo };
+```
+There are currently not supported by the API guardian. 
+To overcome this limitiation we created `_golden-api.ts` in certain packages.
+
+When adding a new API, it might be the case that you need to add it to `_golden-api.ts`.

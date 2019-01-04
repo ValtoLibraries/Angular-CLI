@@ -7,12 +7,15 @@
  */
 import {
   BaseException,
+  InvalidJsonCharacterException,
   JsonObject,
+  UnexpectedEndOfInputException,
   isObservable,
   normalize,
   virtualFs,
 } from '@angular-devkit/core';
 import { NodeJsSyncHost } from '@angular-devkit/core/node';
+import { existsSync, statSync } from 'fs';
 import { dirname, isAbsolute, join, resolve } from 'path';
 import { Observable, from as observableFrom, of as observableOf, throwError } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
@@ -38,7 +41,11 @@ import { readJsonFile } from './file-system-utility';
 
 
 export declare type OptionTransform<T extends object, R extends object>
-    = (schematic: FileSystemSchematicDescription, options: T) => Observable<R>;
+    = (
+      schematic: FileSystemSchematicDescription,
+      options: T,
+      context?: FileSystemSchematicContext,
+    ) => Observable<R>;
 
 
 export class CollectionCannotBeResolvedException extends BaseException {
@@ -47,8 +54,18 @@ export class CollectionCannotBeResolvedException extends BaseException {
   }
 }
 export class InvalidCollectionJsonException extends BaseException {
-  constructor(_name: string, path: string) {
-    super(`Collection JSON at path ${JSON.stringify(path)} is invalid.`);
+  constructor(
+    _name: string,
+    path: string,
+    jsonException?: UnexpectedEndOfInputException | InvalidJsonCharacterException,
+  ) {
+    let msg = `Collection JSON at path ${JSON.stringify(path)} is invalid.`;
+
+    if (jsonException) {
+      msg = `${msg} ${jsonException.message}`;
+    }
+
+    super(msg);
   }
 }
 export class SchematicMissingFactoryException extends BaseException {
@@ -220,7 +237,6 @@ export abstract class FileSystemEngineHostBase implements
       throw new FactoryCannotBeResolvedException(name);
     }
 
-    const { path } = resolvedRef;
     let schema = partialDesc.schema;
     let schemaJson: JsonObject | undefined = undefined;
     if (schema) {
@@ -229,6 +245,15 @@ export abstract class FileSystemEngineHostBase implements
       }
       schemaJson = readJsonFile(schema) as JsonObject;
     }
+
+    // The schematic path is used to resolve URLs.
+    // We should be able to just do `dirname(resolvedRef.path)` but for compatibility with
+    // Bazel under Windows this directory needs to be resolved from the collection instead.
+    // This is needed because on Bazel under Windows the data files (such as the collection or
+    // url files) are not in the same place as the compiled JS.
+    const maybePath = join(collectionPath, partialDesc.factory);
+    const path = existsSync(maybePath) && statSync(maybePath).isDirectory()
+      ? maybePath : dirname(maybePath);
 
     return this._transformSchematicDescription(name, collection, {
       ...partialDesc,
@@ -248,9 +273,7 @@ export abstract class FileSystemEngineHostBase implements
         return (context: FileSystemSchematicContext) => {
           // Resolve all file:///a/b/c/d from the schematic's own path, and not the current
           // path.
-          const root = normalize(
-            resolve(dirname(context.schematic.description.path), url.path || ''),
-          );
+          const root = normalize(resolve(context.schematic.description.path, url.path || ''));
 
           return new HostCreateTree(new virtualFs.ScopedHost(new NodeJsSyncHost(), root));
         };
@@ -262,11 +285,13 @@ export abstract class FileSystemEngineHostBase implements
   transformOptions<OptionT extends object, ResultT extends object>(
     schematic: FileSystemSchematicDesc,
     options: OptionT,
+    context?: FileSystemSchematicContext,
   ): Observable<ResultT> {
-    return (observableOf(options)
+    // tslint:disable-next-line:no-any https://github.com/ReactiveX/rxjs/issues/3989
+    return ((observableOf(options) as any)
       .pipe(
         ...this._transforms.map(tFn => mergeMap(opt => {
-          const newOptions = tFn(schematic, opt);
+          const newOptions = tFn(schematic, opt, context);
           if (isObservable(newOptions)) {
             return newOptions;
           } else {

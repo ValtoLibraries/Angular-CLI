@@ -12,7 +12,7 @@ import {
   BuilderContext,
 } from '@angular-devkit/architect';
 import { LoggingCallback, WebpackBuilder } from '@angular-devkit/build-webpack';
-import { Path, getSystemPath, normalize, resolve, virtualFs } from '@angular-devkit/core';
+import { Path, getSystemPath, join, normalize, resolve, virtualFs } from '@angular-devkit/core';
 import * as fs from 'fs';
 import { Observable, concat, of, throwError } from 'rxjs';
 import { concatMap, last, tap } from 'rxjs/operators';
@@ -34,47 +34,35 @@ import {
   statsToString,
   statsWarningsToString,
 } from '../angular-cli-files/utilities/stats';
-import { defaultProgress, normalizeAssetPatterns, normalizeFileReplacements } from '../utils';
-import { AssetPatternObject, BrowserBuilderSchema, CurrentFileReplacement } from './schema';
+import { defaultProgress, normalizeBuilderSchema } from '../utils';
+import { BrowserBuilderSchema, NormalizedBrowserBuilderSchema } from './schema';
+const SpeedMeasurePlugin = require('speed-measure-webpack-plugin');
 const webpackMerge = require('webpack-merge');
-
-
-// TODO: figure out a better way to normalize assets, extra entry points, file replacements,
-// and whatever else needs to be normalized, while keeping type safety.
-// Right now this normalization has to be done in all other builders that make use of the
-// BrowserBuildSchema and BrowserBuilder.buildWebpackConfig.
-// It would really help if it happens during architect.validateBuilderOptions, or similar.
-export interface NormalizedBrowserBuilderSchema extends BrowserBuilderSchema {
-  assets: AssetPatternObject[];
-  fileReplacements: CurrentFileReplacement[];
-}
 
 export class BrowserBuilder implements Builder<BrowserBuilderSchema> {
 
   constructor(public context: BuilderContext) { }
 
   run(builderConfig: BuilderConfiguration<BrowserBuilderSchema>): Observable<BuildEvent> {
-    const options = builderConfig.options;
     const root = this.context.workspace.root;
     const projectRoot = resolve(root, builderConfig.root);
     const host = new virtualFs.AliasHost(this.context.host as virtualFs.Host<fs.Stats>);
     const webpackBuilder = new WebpackBuilder({ ...this.context, host });
 
+    const options = normalizeBuilderSchema(
+      host,
+      root,
+      builderConfig,
+    );
+
     return of(null).pipe(
       concatMap(() => options.deleteOutputPath
         ? this._deleteOutputDir(root, normalize(options.outputPath), this.context.host)
         : of(null)),
-      concatMap(() => normalizeFileReplacements(options.fileReplacements, host, root)),
-      tap(fileReplacements => options.fileReplacements = fileReplacements),
-      concatMap(() => normalizeAssetPatterns(
-        options.assets, host, root, projectRoot, builderConfig.sourceRoot)),
-      // Replace the assets in options with the normalized version.
-      tap((assetPatternObjects => options.assets = assetPatternObjects)),
       concatMap(() => {
         let webpackConfig;
         try {
-          webpackConfig = this.buildWebpackConfig(root, projectRoot, host,
-            options as NormalizedBrowserBuilderSchema);
+          webpackConfig = this.buildWebpackConfig(root, projectRoot, host, options);
         } catch (e) {
           return throwError(e);
         }
@@ -131,6 +119,7 @@ export class BrowserBuilder implements Builder<BrowserBuilderSchema> {
 
     wco = {
       root: getSystemPath(root),
+      logger: this.context.logger,
       projectRoot: getSystemPath(projectRoot),
       buildOptions: options,
       tsConfig,
@@ -154,7 +143,18 @@ export class BrowserBuilder implements Builder<BrowserBuilderSchema> {
       webpackConfigs.push(typescriptConfigPartial);
     }
 
-    return webpackMerge(webpackConfigs);
+    const webpackConfig = webpackMerge(webpackConfigs);
+
+    if (options.profile) {
+      const smp = new SpeedMeasurePlugin({
+        outputFormat: 'json',
+        outputTarget: getSystemPath(join(root, 'speed-measure-plugin.json')),
+      });
+
+      return smp.wrap(webpackConfig);
+    }
+
+    return webpackConfig;
   }
 
   private _deleteOutputDir(root: Path, outputPath: Path, host: virtualFs.Host) {

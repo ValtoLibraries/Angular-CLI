@@ -114,6 +114,14 @@ function loadPackageJson(p: string) {
         pkg[key] = b;
         break;
 
+      // Overwrite engines to a common default.
+      case 'engines':
+        pkg['engines'] = {
+          'node': '>= 8.9.0',
+          'npm': '>= 5.5.1',
+        };
+        break;
+
       // Overwrite the package's key with to root one.
       default:
         pkg[key] = root[key];
@@ -212,7 +220,9 @@ export const packages: PackageMap =
         relative: path.relative(path.dirname(__dirname), pkgRoot),
         main: path.resolve(pkgRoot, 'src/index.ts'),
         private: packageJson.private,
-        tar: path.join(distRoot, name.replace('/', '_') + '.tgz'),
+        // yarn doesn't take kindly to @ in tgz filenames
+        // https://github.com/yarnpkg/yarn/issues/6339
+        tar: path.join(distRoot, name.replace(/\/|@/g, '_') + '.tgz'),
         bin,
         name,
         packageJson,

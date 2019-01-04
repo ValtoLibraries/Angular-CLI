@@ -27,25 +27,12 @@ function hook(
   compiler: any,
   action: (compilation: any, chunks: Array<Chunk>) => Promise<void | void[]>,
 ) {
-  if (compiler.hooks) {
-    // Webpack 4
-    compiler.hooks.compilation.tap('cleancss-webpack-plugin', (compilation: any) => {
-      compilation.hooks.optimizeChunkAssets.tapPromise(
-        'cleancss-webpack-plugin',
-        (chunks: Array<Chunk>) => action(compilation, chunks),
-      );
-    });
-  } else {
-    // Webpack 3
-    compiler.plugin('compilation', (compilation: any) => {
-      compilation.plugin(
-        'optimize-chunk-assets',
-        (chunks: Array<Chunk>, callback: (err?: Error) => void) => action(compilation, chunks)
-          .then(() => callback())
-          .catch((err) => callback(err)),
-      );
-    });
-  }
+  compiler.hooks.compilation.tap('cleancss-webpack-plugin', (compilation: any) => {
+    compilation.hooks.optimizeChunkAssets.tapPromise(
+      'cleancss-webpack-plugin',
+      (chunks: Array<Chunk>) => action(compilation, chunks),
+    );
+  });
 }
 
 export class CleanCssWebpackPlugin {
@@ -63,7 +50,11 @@ export class CleanCssWebpackPlugin {
     hook(compiler, (compilation: compilation.Compilation, chunks: Array<Chunk>) => {
       const cleancss = new CleanCSS({
         compatibility: 'ie9',
-        level: 2,
+        level: {
+          2: {
+            skipProperties: ['transition'] // Fixes #12408
+          }
+        },
         inline: false,
         returnPromise: true,
         sourceMap: this._options.sourceMap,

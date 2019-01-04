@@ -9,44 +9,17 @@
 // tslint:disable:no-global-tslint-disable no-any
 import { tags, terminal } from '@angular-devkit/core';
 import { NodePackageDoesNotSupportSchematics } from '@angular-devkit/schematics/tools';
-import { parseOptions } from '../models/command-runner';
+import { Arguments } from '../models/interface';
 import { SchematicCommand } from '../models/schematic-command';
 import { NpmInstall } from '../tasks/npm-install';
-import { getPackageManager } from '../utilities/config';
+import { getPackageManager } from '../utilities/package-manager';
+import { Schema as AddCommandSchema } from './add';
 
-
-export class AddCommand extends SchematicCommand {
+export class AddCommand extends SchematicCommand<AddCommandSchema> {
   readonly allowPrivateSchematics = true;
 
-  private async _parseSchematicOptions(collectionName: string): Promise<any> {
-    const schematicOptions = await this.getOptions({
-      schematicName: 'ng-add',
-      collectionName,
-    });
-    this.addOptions(schematicOptions);
-
-    return parseOptions(this._rawArgs, this.options);
-  }
-
-  validate(options: any) {
-    const collectionName = options._[0];
-
-    if (!collectionName) {
-      this.logger.fatal(
-        `The "ng add" command requires a name argument to be specified eg. `
-        + `${terminal.yellow('ng add [name] ')}. For more details, use "ng help".`,
-      );
-
-      return false;
-    }
-
-    return true;
-  }
-
-  async run(options: any) {
-    const firstArg = options._[0];
-
-    if (!firstArg) {
+  async run(options: AddCommandSchema & Arguments) {
+    if (!options.collection) {
       this.logger.fatal(
         `The "ng add" command requires a name argument to be specified eg. `
         + `${terminal.yellow('ng add [name] ')}. For more details, use "ng help".`,
@@ -55,20 +28,20 @@ export class AddCommand extends SchematicCommand {
       return 1;
     }
 
-    const packageManager = getPackageManager();
+    const packageManager = getPackageManager(this.workspace.root);
 
     const npmInstall: NpmInstall = require('../tasks/npm-install').default;
 
-    const packageName = firstArg.startsWith('@')
-      ? firstArg.split('/', 2).join('/')
-      : firstArg.split('/', 1)[0];
+    const packageName = options.collection.startsWith('@')
+      ? options.collection.split('/', 2).join('/')
+      : options.collection.split('/', 1)[0];
 
     // Remove the tag/version from the package name.
     const collectionName = (
       packageName.startsWith('@')
         ? packageName.split('@', 2).join('@')
         : packageName.split('@', 1).join('@')
-    ) + firstArg.slice(packageName.length);
+    ) + options.collection.slice(packageName.length);
 
     // We don't actually add the package to package.json, that would be the work of the package
     // itself.
@@ -76,15 +49,12 @@ export class AddCommand extends SchematicCommand {
       packageName,
       this.logger,
       packageManager,
-      this.project.root,
+      this.workspace.root,
     );
 
-    // Reparse the options with the new schematic accessible.
-    options = await this._parseSchematicOptions(collectionName);
-
     const runOptions = {
-      schematicOptions: options,
-      workingDir: this.project.root,
+      schematicOptions: options['--'] || [],
+      workingDir: this.workspace.root,
       collectionName,
       schematicName: 'ng-add',
       allowPrivate: true,

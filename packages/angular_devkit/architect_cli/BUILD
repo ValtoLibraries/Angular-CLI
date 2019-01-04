@@ -4,23 +4,23 @@
 # found in the LICENSE file at https://angular.io/license
 package(default_visibility = ["//visibility:public"])
 
-load("//tools:defaults.bzl", "ts_library")
+load("@build_bazel_rules_typescript//:defs.bzl", "ts_library")
 
 licenses(["notice"])  # MIT
 
 ts_library(
-    name = "architect-cli",
+    name = "architect_cli",
     srcs = [
         "bin/architect.ts",
     ],
+    module_name = "@angular-devkit/architect-cli",
     deps = [
         "//packages/angular_devkit/architect",
         "//packages/angular_devkit/core",
         "//packages/angular_devkit/core:node",
         "@rxjs",
         "@rxjs//operators",
+        "@npm//@types/node",
+        "@npm//@types/minimist",
     ],
-    tsconfig = "//:tsconfig.json",
-    module_name = "@angular-devkit/architect-cli",
-    module_root = "bin",
 )

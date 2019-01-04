@@ -5,13 +5,12 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import * as fs from 'fs';
-
+import { statSync } from 'fs';
 
 export function isFile(filePath: string): boolean {
   let stat;
   try {
-    stat = fs.statSync(filePath);
+    stat = statSync(filePath);
   } catch (e) {
     if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) {
       return false;
@@ -26,7 +25,7 @@ export function isFile(filePath: string): boolean {
 export function isDirectory(filePath: string): boolean {
   let stat;
   try {
-    stat = fs.statSync(filePath);
+    stat = statSync(filePath);
   } catch (e) {
     if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) {
       return false;

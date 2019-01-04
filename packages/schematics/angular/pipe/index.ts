@@ -23,11 +23,10 @@ import {
 import * as ts from 'typescript';
 import { addDeclarationToModule, addExportToModule } from '../utility/ast-utils';
 import { InsertChange } from '../utility/change';
-import { getWorkspace } from '../utility/config';
 import { buildRelativePath, findModuleFromOptions } from '../utility/find-module';
 import { applyLintFix } from '../utility/lint-fix';
 import { parseName } from '../utility/parse-name';
-import { buildDefaultPath } from '../utility/project';
+import { buildDefaultPath, getProject } from '../utility/project';
 import { Schema as PipeOptions } from './schema';
 
 
@@ -88,24 +87,26 @@ function addDeclarationToNgModule(options: PipeOptions): Rule {
 
 export default function (options: PipeOptions): Rule {
   return (host: Tree) => {
-    const workspace = getWorkspace(host);
     if (!options.project) {
       throw new SchematicsException('Option (project) is required.');
     }
-    const project = workspace.projects[options.project];
+    const project = getProject(host, options.project);
 
     if (options.path === undefined) {
       options.path = buildDefaultPath(project);
     }
 
+    options.module = findModuleFromOptions(host, options);
+
     const parsedPath = parseName(options.path, options.name);
     options.name = parsedPath.name;
     options.path = parsedPath.path;
 
-    options.module = findModuleFromOptions(host, options);
+    // todo remove these when we remove the deprecations
+    options.skipTests = options.skipTests || !options.spec;
 
     const templateSource = apply(url('./files'), [
-      options.spec ? noop() : filter(path => !path.endsWith('.spec.ts')),
+      options.skipTests ? filter(path => !path.endsWith('.spec.ts')) : noop(),
       template({
         ...strings,
         'if-flat': (s: string) => options.flat ? '' : s,

@@ -1,9 +1,14 @@
 <!-- Links in /docs/documentation should NOT have \`.md\` at the end, because they end up in our wiki at release. -->
 
+**Documentation below is for CLI version 6. For version 7 see [here](https://angular.io/cli/generate)**.
+
 # ng generate app-shell
 
 ## Overview
-Create an app shell.
+`ng generate appShell [name]` creates an app shell
+
+## Alias
+app-shell - `ng generate app-shell [name]`
 
 ## Options
 <details>

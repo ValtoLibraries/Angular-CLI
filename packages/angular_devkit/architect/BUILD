@@ -5,35 +5,59 @@
 
 licenses(["notice"])  # MIT
 
-load("//tools:defaults.bzl", "ts_library")
+load("@build_bazel_rules_typescript//:defs.bzl", "ts_library")
+load("@build_bazel_rules_nodejs//:defs.bzl", "npm_package")
 
 package(default_visibility = ["//visibility:public"])
 
 ts_library(
     name = "architect",
     srcs = glob(
-        ["src/**/*.ts"],
-        # Currently, this library is used only with the rollup plugin.
-        # To make it simpler for downstream repositories to compile this, we
-        # neither provide compile-time deps as an `npm_install` rule, nor do we
-        # expect the downstream repository to install @types/webpack[-*]
-        # So we exclude files that depend on webpack typings.
+        include = ["src/**/*.ts"],
         exclude = [
             "**/*_spec.ts",
             "**/*_spec_large.ts",
         ],
     ),
+    module_name = "@angular-devkit/architect",
+    module_root = "src/index.d.ts",
+    # strict_checks = False,
     data = glob(["**/*.json"]),
     deps = [
         "//packages/angular_devkit/core",
         "//packages/angular_devkit/core:node",
         "@rxjs",
         "@rxjs//operators",
+        "@npm//@types/node",
     ],
-    tsconfig = "//:tsconfig.json",
-    module_name = "@angular-devkit/architect",
-    module_root = "src",
-    # Borrow the compile-time deps of the typescript compiler
-    # Just to avoid an extra npm install action.
-    node_modules = "@build_bazel_rules_typescript_tsc_wrapped_deps//:node_modules",
+)
+
+ts_library(
+    name = "testing",
+    srcs = glob(
+        include = ["testing/**/*.ts"],
+        exclude = [
+            "**/*_spec.ts",
+            "**/*_spec_large.ts",
+        ],
+    ),
+    module_name = "@angular-devkit/architect/testing",
+    module_root = "testing/index.d.ts",
+    deps = [
+        ":architect",
+        "//packages/angular_devkit/core",
+        "//packages/angular_devkit/core:node",
+        "@rxjs",
+        "@rxjs//operators",
+        "@npm//@types/node",
+    ],
+)
+
+
+npm_package(
+    name = "npm_package",
+    deps = [
+        ":architect",
+        ":testing"
+    ],
 )

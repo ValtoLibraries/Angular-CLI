@@ -9,26 +9,9 @@ import { Observable, concat, from, of as observableOf } from 'rxjs';
 import { concatMap, ignoreElements, mergeMap, tap } from 'rxjs/operators';
 import { isObservable } from '../../utils';
 import { JsonArray, JsonObject, JsonValue } from '../interface';
-import { JsonPointer } from './interface';
+import { JsonPointer, JsonSchemaVisitor, JsonVisitor } from './interface';
 import { buildJsonPointer, joinJsonPointer } from './pointer';
-
-export interface JsonSchemaVisitor {
-  (
-    current: JsonObject | JsonArray,
-    pointer: JsonPointer,
-    parentSchema?: JsonObject | JsonArray,
-    index?: string,
-  ): void;
-}
-
-export interface JsonVisitor {
-  (
-    value: JsonValue,
-    pointer: JsonPointer,
-    schema?: JsonObject,
-    root?: JsonObject | JsonArray,
-  ): Observable<JsonValue> | JsonValue;
-}
+import { JsonSchema } from './schema';
 
 
 export interface ReferenceResolver<ContextT> {
@@ -104,7 +87,7 @@ function _visitJsonRecursive<ContextT>(
             }),
             ignoreElements(),
           ),
-          observableOf(value),
+          observableOf<JsonValue>(value),
         );
       } else if (typeof value == 'object' && value !== null) {
         return concat(
@@ -157,7 +140,12 @@ export function visitJson<ContextT>(
 }
 
 
-export function visitJsonSchema(schema: JsonObject, visitor: JsonSchemaVisitor) {
+export function visitJsonSchema(schema: JsonSchema, visitor: JsonSchemaVisitor) {
+  if (schema === false || schema === true) {
+    // Nothing to visit.
+    return;
+  }
+
   const keywords = {
     additionalItems: true,
     items: true,
@@ -165,6 +153,13 @@ export function visitJsonSchema(schema: JsonObject, visitor: JsonSchemaVisitor) 
     additionalProperties: true,
     propertyNames: true,
     not: true,
+  };
+
+  const arrayKeywords = {
+    items: true,
+    allOf: true,
+    anyOf: true,
+    oneOf: true,
   };
 
   const propsKeywords = {
@@ -188,23 +183,11 @@ export function visitJsonSchema(schema: JsonObject, visitor: JsonSchemaVisitor) 
 
       for (const key of Object.keys(schema)) {
         const sch = schema[key];
-        if (Array.isArray(sch)) {
-          if (key == 'items') {
-            for (let i = 0; i < sch.length; i++) {
-              _traverse(
-                sch[i] as JsonArray,
-                joinJsonPointer(jsonPtr, key, '' + i),
-                rootSchema,
-                schema,
-                '' + i,
-              );
-            }
-          }
-        } else if (key in propsKeywords) {
+        if (key in propsKeywords) {
           if (sch && typeof sch == 'object') {
             for (const prop of Object.keys(sch)) {
               _traverse(
-                sch[prop] as JsonObject,
+                (sch as JsonObject)[prop] as JsonObject,
                 joinJsonPointer(jsonPtr, key, prop),
                 rootSchema,
                 schema,
@@ -214,6 +197,28 @@ export function visitJsonSchema(schema: JsonObject, visitor: JsonSchemaVisitor) 
           }
         } else if (key in keywords) {
           _traverse(sch as JsonObject, joinJsonPointer(jsonPtr, key), rootSchema, schema, key);
+        } else if (key in arrayKeywords) {
+          if (Array.isArray(sch)) {
+            for (let i = 0; i < sch.length; i++) {
+              _traverse(
+                sch[i] as JsonArray,
+                joinJsonPointer(jsonPtr, key, '' + i),
+                rootSchema,
+                sch,
+                '' + i,
+              );
+            }
+          }
+        } else if (Array.isArray(sch)) {
+          for (let i = 0; i < sch.length; i++) {
+            _traverse(
+              sch[i] as JsonArray,
+              joinJsonPointer(jsonPtr, key, '' + i),
+              rootSchema,
+              sch,
+              '' + i,
+            );
+          }
         }
       }
     }

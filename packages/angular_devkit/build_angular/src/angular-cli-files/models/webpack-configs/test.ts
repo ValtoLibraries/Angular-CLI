@@ -10,6 +10,7 @@ import * as glob from 'glob';
 import * as path from 'path';
 import * as webpack from 'webpack';
 import { WebpackConfigOptions, WebpackTestOptions } from '../build-options';
+import { getSourceMapDevTool } from './utils';
 
 
 /**
@@ -23,7 +24,7 @@ import { WebpackConfigOptions, WebpackTestOptions } from '../build-options';
 export function getTestConfig(
   wco: WebpackConfigOptions<WebpackTestOptions>,
 ): webpack.Configuration {
-  const { root, buildOptions } = wco;
+  const { root, buildOptions, sourceRoot: include } = wco;
 
   const extraRules: webpack.Rule[] = [];
   const extraPlugins: webpack.Plugin[] = [];
@@ -46,11 +47,24 @@ export function getTestConfig(
     }
 
     extraRules.push({
-      test: /\.(js|ts)$/, loader: 'istanbul-instrumenter-loader',
+      test: /\.(js|ts)$/,
+      loader: 'istanbul-instrumenter-loader',
       options: { esModules: true },
       enforce: 'post',
       exclude,
+      include,
     });
+  }
+
+  if (wco.buildOptions.sourceMap) {
+    const { styles, scripts } = wco.buildOptions.sourceMap;
+
+    extraPlugins.push(getSourceMapDevTool(
+      styles,
+      scripts,
+      false,
+      true,
+    ));
   }
 
   return {
@@ -61,7 +75,7 @@ export function getTestConfig(
         'browser', 'module', 'main',
       ],
     },
-    devtool: buildOptions.sourceMap ? 'inline-source-map' : 'eval',
+    devtool: buildOptions.sourceMap ? false : 'eval',
     entry: {
       main: path.resolve(root, buildOptions.main),
     },

@@ -11,7 +11,12 @@ import { HostTree } from '@angular-devkit/schematics';
 import * as ts from 'typescript';
 import { Change, InsertChange } from '../utility/change';
 import { getFileContent } from '../utility/test';
-import { addExportToModule, addSymbolToNgModuleMetadata } from './ast-utils';
+import {
+  addDeclarationToModule,
+  addExportToModule,
+  addProviderToModule,
+  addSymbolToNgModuleMetadata,
+} from './ast-utils';
 
 
 function getTsSource(path: string, content: string): ts.SourceFile {
@@ -71,6 +76,15 @@ describe('ast utils', () => {
     const output = applyChanges(modulePath, moduleContent, changes);
     expect(output).toMatch(/import { FooComponent } from '.\/foo.component';/);
     expect(output).toMatch(/exports: \[FooComponent\]/);
+  });
+
+  it('should add declarations to module if not indented', () => {
+    moduleContent = tags.stripIndents`${moduleContent}`;
+    const source = getTsSource(modulePath, moduleContent);
+    const changes = addDeclarationToModule(source, modulePath, 'FooComponent', './foo.component');
+    const output = applyChanges(modulePath, moduleContent, changes);
+    expect(output).toMatch(/import { FooComponent } from '.\/foo.component';/);
+    expect(output).toMatch(/declarations: \[\nAppComponent,\nFooComponent\n\]/);
   });
 
   it('should add metadata', () => {
@@ -150,5 +164,45 @@ describe('ast utils', () => {
 
     const output = applyChanges(modulePath, moduleContent, changes || []);
     expect(output).toMatch(/imports: \[HelloWorld],\r?\n/m);
+  });
+
+  it('should handle NgModule with no newlines', () => {
+    const moduleContent = `
+      import { BrowserModule } from '@angular/platform-browser';
+      import { NgModule } from '@angular/core';
+
+      @NgModule({imports: [BrowserModule], declarations: []})
+      export class AppModule { }
+    `;
+    const source = getTsSource(modulePath, moduleContent);
+    const changes = addExportToModule(source, modulePath, 'FooComponent', './foo.component');
+    const output = applyChanges(modulePath, moduleContent, changes);
+    expect(output).toMatch(/import { FooComponent } from '.\/foo.component';/);
+    expect(output).toMatch(/exports: \[FooComponent\]/);
+  });
+
+  it('should add into providers metadata in new line ', () => {
+    const moduleContent = `
+      import { BrowserModule } from '@angular/platform-browser';
+      import { NgModule } from '@angular/core';
+
+      @NgModule({
+        imports: [BrowserModule],
+        declarations: [],
+        providers: [
+          {
+            provide: HTTP_INTERCEPTORS,
+            useClass: AuthInterceptor,
+            multi: true
+          }
+        ]
+      })
+      export class AppModule { }
+    `;
+    const source = getTsSource(modulePath, moduleContent);
+    const changes = addProviderToModule(source, modulePath, 'LogService', './log.service');
+    const output = applyChanges(modulePath, moduleContent, changes);
+    expect(output).toMatch(/import { LogService } from '.\/log.service';/);
+    expect(output).toMatch(/\},\r?\n\s*LogService\r?\n\s*\]/);
   });
 });

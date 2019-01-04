@@ -25,15 +25,26 @@ import {
   Position,
 } from './interface';
 
+export class JsonException extends BaseException {}
 
 /**
  * A character was invalid in this context.
  */
-export class InvalidJsonCharacterException extends BaseException {
+export class InvalidJsonCharacterException extends JsonException {
+  invalidChar: string;
+  line: number;
+  character: number;
+  offset: number;
+
   constructor(context: JsonParserContext) {
     const pos = context.previous;
-    super(`Invalid JSON character: ${JSON.stringify(_peek(context))} `
-        + `at ${pos.line}:${pos.character}.`);
+    const invalidChar = JSON.stringify(_peek(context));
+    super(`Invalid JSON character: ${invalidChar} at ${pos.line}:${pos.character}.`);
+
+    this.invalidChar = invalidChar;
+    this.line = pos.line;
+    this.offset = pos.offset;
+    this.character = pos.character;
   }
 }
 
@@ -41,12 +52,20 @@ export class InvalidJsonCharacterException extends BaseException {
 /**
  * More input was expected, but we reached the end of the stream.
  */
-export class UnexpectedEndOfInputException extends BaseException {
+export class UnexpectedEndOfInputException extends JsonException {
   constructor(_context: JsonParserContext) {
     super(`Unexpected end of file.`);
   }
 }
 
+/**
+ * An error happened within a file.
+ */
+export class PathSpecificJsonException extends JsonException {
+  constructor(public path: string, public exception: JsonException) {
+    super(`An error happened at file path ${JSON.stringify(path)}: ${exception.message}`);
+  }
+}
 
 /**
  * Context passed around the parser with information about where we currently are in the parse.
@@ -843,20 +862,48 @@ export function parseJsonAst(input: string, mode = JsonParseMode.Default): JsonA
 
 
 /**
+ * Options for the parseJson() function.
+ */
+export interface ParseJsonOptions {
+  /**
+   * If omitted, will only emit errors related to the content of the JSON. If specified, any
+   * JSON errors will also include the path of the file that caused the error.
+   */
+  path?: string;
+}
+
+
+/**
  * Parse a JSON string into its value.  This discards the AST and only returns the value itself.
+ *
+ * If a path option is pass, it also absorbs JSON parsing errors and return a new error with the
+ * path in it. Useful for showing errors when parsing from a file.
+ *
  * @param input The string to parse.
  * @param mode The mode to parse the input with. {@see JsonParseMode}.
+ * @param options Additional optinos for parsing.
  * @returns {JsonValue} The value represented by the JSON string.
  */
-export function parseJson(input: string, mode = JsonParseMode.Default): JsonValue {
-  // Try parsing for the fastest path available, if error, uses our own parser for better errors.
-  if (mode == JsonParseMode.Strict) {
-    try {
-      return JSON.parse(input);
-    } catch (err) {
-      return parseJsonAst(input, mode).value;
+export function parseJson(
+  input: string,
+  mode = JsonParseMode.Default,
+  options?: ParseJsonOptions,
+): JsonValue {
+  try {
+    // Try parsing for the fastest path available, if error, uses our own parser for better errors.
+    if (mode == JsonParseMode.Strict) {
+      try {
+        return JSON.parse(input);
+      } catch (err) {
+        return parseJsonAst(input, mode).value;
+      }
     }
-  }
 
-  return parseJsonAst(input, mode).value;
+    return parseJsonAst(input, mode).value;
+  } catch (e) {
+    if (options && options.path && e instanceof JsonException) {
+      throw new PathSpecificJsonException(options.path, e);
+    }
+    throw e;
+  }
 }

@@ -1,9 +1,14 @@
 <!-- Links in /docs/documentation should NOT have \`.md\` at the end, because they end up in our wiki at release. -->
 
+**Documentation below is for CLI version 6. For version 7 see [here](https://angular.io/cli/generate)**.
+
 # ng generate application
 
 ## Overview
-Create an Angular application.
+`ng generate application [name]` creates an Angular application.
+
+## Alias
+app - `ng generate app [name]`
 
 ## Options
 <details>

@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
 import { Schema as InterfaceOptions } from './schema';
@@ -15,7 +14,7 @@ import { Schema as InterfaceOptions } from './schema';
 describe('Interface Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: InterfaceOptions = {
     name: 'foo',
@@ -47,7 +46,7 @@ describe('Interface Schematic', () => {
 
   it('should create one file', () => {
     const tree = schematicRunner.runSchematic('interface', defaultOptions, appTree);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.ts')).toBeGreaterThanOrEqual(0);
+    expect(tree.files).toContain('/projects/bar/src/app/foo.ts');
   });
 
   it('should create an interface named "Foo"', () => {
@@ -60,7 +59,7 @@ describe('Interface Schematic', () => {
     const options = { ...defaultOptions, type: 'model' };
 
     const tree = schematicRunner.runSchematic('interface', options, appTree);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.model.ts')).toBeGreaterThanOrEqual(0);
+    expect(tree.files).toContain('/projects/bar/src/app/foo.model.ts');
   });
 
   it('should respect the sourceRoot value', () => {
@@ -68,7 +67,6 @@ describe('Interface Schematic', () => {
     config.projects.bar.sourceRoot = 'projects/bar/custom';
     appTree.overwrite('/angular.json', JSON.stringify(config, null, 2));
     appTree = schematicRunner.runSchematic('interface', defaultOptions, appTree);
-    expect(appTree.files.indexOf('/projects/bar/custom/app/foo.ts'))
-      .toBeGreaterThanOrEqual(0);
+    expect(appTree.files).toContain('/projects/bar/custom/app/foo.ts');
   });
 });

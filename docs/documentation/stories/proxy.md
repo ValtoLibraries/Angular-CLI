@@ -1,3 +1,5 @@
+**Documentation below is for CLI version 6. For version 7 see [here](https://angular.io/guide/build#using-corporate-proxy)**.
+
 # Proxy To Backend
 
 Using the [proxying support](https://webpack.js.org/configuration/dev-server/#devserver-proxy) in webpack's dev server we can highjack certain URLs and send them to a backend server.
@@ -26,7 +28,7 @@ We can then add the `proxyConfig` option to the serve target:
     "builder": "@angular-devkit/build-angular:dev-server",
     "options": {
       "browserTarget": "your-application-name:build",
-      "proxyConfig": "src/proxy.conf.json"
+      "proxyConfig": "proxy.conf.json"
     },
 ```
 
@@ -119,7 +121,7 @@ Make sure to point to the right file (`.js` instead of `.json`):
     "builder": "@angular-devkit/build-angular:dev-server",
     "options": {
       "browserTarget": "your-application-name:build",
-      "proxyConfig": "src/proxy.conf.js"
+      "proxyConfig": "proxy.conf.js"
     },
 ```
 

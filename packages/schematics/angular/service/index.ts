@@ -19,19 +19,17 @@ import {
   template,
   url,
 } from '@angular-devkit/schematics';
-import { getWorkspace } from '../utility/config';
 import { applyLintFix } from '../utility/lint-fix';
 import { parseName } from '../utility/parse-name';
-import { buildDefaultPath } from '../utility/project';
+import { buildDefaultPath, getProject } from '../utility/project';
 import { Schema as ServiceOptions } from './schema';
 
 export default function (options: ServiceOptions): Rule {
   return (host: Tree) => {
-    const workspace = getWorkspace(host);
     if (!options.project) {
       throw new SchematicsException('Option (project) is required.');
     }
-    const project = workspace.projects[options.project];
+    const project = getProject(host, options.project);
 
     if (options.path === undefined) {
       options.path = buildDefaultPath(project);
@@ -41,8 +39,11 @@ export default function (options: ServiceOptions): Rule {
     options.name = parsedPath.name;
     options.path = parsedPath.path;
 
+    // todo remove these when we remove the deprecations
+    options.skipTests = options.skipTests || !options.spec;
+
     const templateSource = apply(url('./files'), [
-      options.spec ? noop() : filter(path => !path.endsWith('.spec.ts')),
+      options.skipTests ? filter(path => !path.endsWith('.spec.ts')) : noop(),
       template({
         ...strings,
         'if-flat': (s: string) => options.flat ? '' : s,

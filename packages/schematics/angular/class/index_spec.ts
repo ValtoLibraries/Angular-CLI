@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
 import { Schema as ClassOptions } from './schema';
@@ -15,7 +14,7 @@ import { Schema as ClassOptions } from './schema';
 describe('Class Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: ClassOptions = {
     name: 'foo',
@@ -48,8 +47,8 @@ describe('Class Schematic', () => {
 
   it('should create just the class file', () => {
     const tree = schematicRunner.runSchematic('class', defaultOptions, appTree);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.ts')).toBeGreaterThanOrEqual(0);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.spec.ts')).toBeLessThan(0);
+    expect(tree.files).toContain('/projects/bar/src/app/foo.ts');
+    expect(tree.files).not.toContain('/projects/bar/src/app/foo.spec.ts');
   });
 
   it('should create the class and spec file', () => {
@@ -58,8 +57,8 @@ describe('Class Schematic', () => {
       spec: true,
     };
     const tree = schematicRunner.runSchematic('class', options, appTree);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.ts')).toBeGreaterThanOrEqual(0);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.spec.ts')).toBeGreaterThanOrEqual(0);
+    expect(tree.files).toContain('/projects/bar/src/app/foo.ts');
+    expect(tree.files).toContain('/projects/bar/src/app/foo.spec.ts');
   });
 
   it('should create an class named "Foo"', () => {
@@ -72,7 +71,7 @@ describe('Class Schematic', () => {
     const options = { ...defaultOptions, type: 'model' };
 
     const tree = schematicRunner.runSchematic('class', options, appTree);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo.model.ts')).toBeGreaterThanOrEqual(0);
+    expect(tree.files).toContain('/projects/bar/src/app/foo.model.ts');
   });
 
   it('should split the name to name & type with split on "."', () => {
@@ -86,7 +85,7 @@ describe('Class Schematic', () => {
   it('should respect the path option', () => {
     const options = { ...defaultOptions, path: 'zzz' };
     const tree = schematicRunner.runSchematic('class', options, appTree);
-    expect(tree.files.indexOf('/zzz/foo.ts')).toBeGreaterThanOrEqual(0);
+    expect(tree.files).toContain('/zzz/foo.ts');
   });
 
   it('should respect the sourceRoot value', () => {
@@ -94,6 +93,6 @@ describe('Class Schematic', () => {
     config.projects.bar.sourceRoot = 'projects/bar/custom';
     appTree.overwrite('/angular.json', JSON.stringify(config, null, 2));
     appTree = schematicRunner.runSchematic('class', defaultOptions, appTree);
-    expect(appTree.files.indexOf('/projects/bar/custom/app/foo.ts')).toBeGreaterThanOrEqual(0);
+    expect(appTree.files).toContain('/projects/bar/custom/app/foo.ts');
   });
 });

@@ -5,9 +5,8 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import { Path, schema, virtualFs } from '@angular-devkit/core';
+import { Path, getSystemPath, virtualFs } from '@angular-devkit/core';
 import {
-  formats,
   workflow,
 } from '@angular-devkit/schematics';  // tslint:disable-line:no-implicit-dependencies
 import { BuiltinTaskExecutor } from '../../tasks/node';
@@ -30,7 +29,6 @@ export class NodeWorkflow extends workflow.BaseWorkflow {
     const engineHost = new NodeModulesEngineHost();
     super({
       host: host,
-      registry: new schema.CoreSchemaRegistry(formats.standardFormats),
       engineHost: engineHost,
 
       force: options.force,
@@ -44,13 +42,13 @@ export class NodeWorkflow extends workflow.BaseWorkflow {
       {
         allowPackageManagerOverride: true,
         packageManager: options.packageManager,
-        rootDirectory: options.root,
+        rootDirectory: options.root && getSystemPath(options.root),
       },
     );
     engineHost.registerTaskExecutor(
       BuiltinTaskExecutor.RepositoryInitializer,
       {
-        rootDirectory: options.root,
+        rootDirectory: options.root && getSystemPath(options.root),
       },
     );
     engineHost.registerTaskExecutor(BuiltinTaskExecutor.RunSchematic);

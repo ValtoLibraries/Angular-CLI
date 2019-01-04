@@ -60,6 +60,16 @@ export default class TslintBuilder implements Builder<TslintBuilderOptions> {
     const root = this.context.workspace.root;
     const systemRoot = getSystemPath(root);
     const options = builderConfig.options;
+    const targetSpecifier = this.context.targetSpecifier;
+    const projectName = targetSpecifier && targetSpecifier.project || '';
+
+    // Print formatter output only for non human-readable formats.
+    const printInfo = ['prose', 'verbose', 'stylish'].includes(options.format)
+      && !options.silent;
+
+    if (printInfo) {
+      this.context.logger.info(`Linting ${JSON.stringify(projectName)}...`);
+    }
 
     if (!options.tsConfig && options.typeCheck) {
       throw new Error('A "project" must be specified to enable type checking.');
@@ -116,20 +126,15 @@ export default class TslintBuilder implements Builder<TslintBuilderOptions> {
         }
       }
 
-      // Print formatter output directly for non human-readable formats.
-      if (['prose', 'verbose', 'stylish'].indexOf(options.format) == -1) {
-        options.silent = true;
-      }
-
-      if (result.warningCount > 0 && !options.silent) {
+      if (result.warningCount > 0 && printInfo) {
         this.context.logger.warn('Lint warnings found in the listed files.');
       }
 
-      if (result.errorCount > 0 && !options.silent) {
+      if (result.errorCount > 0 && printInfo) {
         this.context.logger.error('Lint errors found in the listed files.');
       }
 
-      if (result.warningCount === 0 && result.errorCount === 0 && !options.silent) {
+      if (result.warningCount === 0 && result.errorCount === 0 && printInfo) {
         this.context.logger.info('All files pass linting.');
       }
 

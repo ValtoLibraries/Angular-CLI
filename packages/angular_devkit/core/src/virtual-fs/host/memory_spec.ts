@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 // tslint:disable:no-implicit-dependencies
-// tslint:disable:non-null-operator
+// tslint:disable:no-non-null-assertion
 import { fragment, normalize } from '@angular-devkit/core';
 import { stringToFileBuffer } from './buffer';
 import { SimpleMemoryHost } from './memory';
@@ -63,6 +63,22 @@ describe('SimpleMemoryHost', () => {
     expect(host.exists(normalize('/sub/file1'))).toBe(true);
     host.delete(normalize('/sub/file1'));
     expect(host.exists(normalize('/sub/file1'))).toBe(false);
+  });
+
+  it('can delete directory', () => {
+    const host = new SyncDelegateHost(new SimpleMemoryHost());
+
+    const buffer = stringToFileBuffer('hello');
+
+    expect(host.exists(normalize('/sub/file1'))).toBe(false);
+    host.write(normalize('/sub/file1'), buffer);
+    host.write(normalize('/subfile.2'), buffer);
+    expect(host.exists(normalize('/sub/file1'))).toBe(true);
+    expect(host.exists(normalize('/subfile.2'))).toBe(true);
+    host.delete(normalize('/sub'));
+    expect(host.exists(normalize('/sub/file1'))).toBe(false);
+    expect(host.exists(normalize('/sub'))).toBe(false);
+    expect(host.exists(normalize('/subfile.2'))).toBe(true);
   });
 
   it('can rename', () => {

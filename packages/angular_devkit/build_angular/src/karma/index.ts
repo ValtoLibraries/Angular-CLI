@@ -15,7 +15,7 @@ import {
 import { Path, getSystemPath, normalize, resolve, virtualFs } from '@angular-devkit/core';
 import * as fs from 'fs';
 import { Observable, of } from 'rxjs';
-import { concatMap, tap } from 'rxjs/operators';
+import { concatMap } from 'rxjs/operators';
 import * as ts from 'typescript'; // tslint:disable-line:no-implicit-dependencies
 import { WebpackConfigOptions } from '../angular-cli-files/models/build-options';
 import {
@@ -26,33 +26,26 @@ import {
 } from '../angular-cli-files/models/webpack-configs';
 import { readTsconfig } from '../angular-cli-files/utilities/read-tsconfig';
 import { requireProjectModule } from '../angular-cli-files/utilities/require-project-module';
-import { AssetPatternObject, CurrentFileReplacement } from '../browser/schema';
-import { defaultProgress, normalizeAssetPatterns, normalizeFileReplacements } from '../utils';
-import { KarmaBuilderSchema } from './schema';
+import { defaultProgress, normalizeBuilderSchema } from '../utils';
+import { KarmaBuilderSchema, NormalizedKarmaBuilderSchema } from './schema';
 const webpackMerge = require('webpack-merge');
 
-
-export interface NormalizedKarmaBuilderSchema extends KarmaBuilderSchema {
-  assets: AssetPatternObject[];
-  fileReplacements: CurrentFileReplacement[];
-}
 
 export class KarmaBuilder implements Builder<KarmaBuilderSchema> {
   constructor(public context: BuilderContext) { }
 
   run(builderConfig: BuilderConfiguration<KarmaBuilderSchema>): Observable<BuildEvent> {
-    const options = builderConfig.options;
     const root = this.context.workspace.root;
     const projectRoot = resolve(root, builderConfig.root);
     const host = new virtualFs.AliasHost(this.context.host as virtualFs.Host<fs.Stats>);
 
+    const options = normalizeBuilderSchema(
+      host,
+      root,
+      builderConfig,
+    );
+
     return of(null).pipe(
-      concatMap(() => normalizeFileReplacements(options.fileReplacements, host, root)),
-      tap(fileReplacements => options.fileReplacements = fileReplacements),
-      concatMap(() => normalizeAssetPatterns(
-        options.assets, host, root, projectRoot, builderConfig.sourceRoot)),
-      // Replace the assets in options with the normalized version.
-      tap((assetPatternObjects => options.assets = assetPatternObjects)),
       concatMap(() => new Observable(obs => {
         const karma = requireProjectModule(getSystemPath(projectRoot), 'karma');
         const karmaConfig = getSystemPath(resolve(root, normalize(options.karmaConfig)));
@@ -71,15 +64,32 @@ export class KarmaBuilder implements Builder<KarmaBuilderSchema> {
           karmaOptions.browsers = options.browsers.split(',');
         }
 
+        if (options.reporters) {
+          // Split along commas to make it more natural, and remove empty strings.
+          const reporters = options.reporters
+            .reduce<string[]>((acc, curr) => acc.concat(curr.split(/,/)), [])
+            .filter(x => !!x);
+
+          if (reporters.length > 0) {
+            karmaOptions.reporters = reporters;
+          }
+        }
+
+        const sourceRoot = builderConfig.sourceRoot && resolve(root, builderConfig.sourceRoot);
+
         karmaOptions.buildWebpack = {
           root: getSystemPath(root),
           projectRoot: getSystemPath(projectRoot),
-          options: options as NormalizedKarmaBuilderSchema,
-          webpackConfig: this._buildWebpackConfig(root, projectRoot, host,
-            options as NormalizedKarmaBuilderSchema),
+          options,
+          webpackConfig: this.buildWebpackConfig(root, projectRoot, sourceRoot, host, options),
           // Pass onto Karma to emit BuildEvents.
           successCb: () => obs.next({ success: true }),
           failureCb: () => obs.next({ success: false }),
+          // Workaround for https://github.com/karma-runner/karma/issues/3154
+          // When this workaround is removed, user projects need to be updated to use a Karma
+          // version that has a fix for this issue.
+          toJSON: () => { },
+          logger: this.context.logger,
         };
 
         // TODO: inside the configs, always use the project root and not the workspace root.
@@ -91,23 +101,23 @@ export class KarmaBuilder implements Builder<KarmaBuilderSchema> {
 
         // Complete the observable once the Karma server returns.
         const karmaServer = new karma.Server(karmaOptions, () => obs.complete());
-        karmaServer.start();
+        const karmaStartPromise = karmaServer.start();
 
         // Cleanup, signal Karma to exit.
         return () => {
-          // Karma does not seem to have a way to exit the server gracefully.
-          // See https://github.com/karma-runner/karma/issues/2867#issuecomment-369912167
-          // TODO: make a PR for karma to add `karmaServer.close(code)`, that
-          // calls `disconnectBrowsers(code);`
-          // karmaServer.close();
+          // Karma only has the `stop` method start with 3.1.1, so we must defensively check.
+          if (karmaServer.stop && typeof karmaServer.stop === 'function') {
+            return karmaStartPromise.then(() => karmaServer.stop());
+          }
         };
       })),
     );
   }
 
-  private _buildWebpackConfig(
+  buildWebpackConfig(
     root: Path,
     projectRoot: Path,
+    sourceRoot: Path | undefined,
     host: virtualFs.Host<fs.Stats>,
     options: NormalizedKarmaBuilderSchema,
   ) {
@@ -129,7 +139,9 @@ export class KarmaBuilder implements Builder<KarmaBuilderSchema> {
 
     wco = {
       root: getSystemPath(root),
+      logger: this.context.logger,
       projectRoot: getSystemPath(projectRoot),
+      sourceRoot: sourceRoot && getSystemPath(sourceRoot),
       // TODO: use only this.options, it contains all flags and configs items already.
       buildOptions: compatOptions,
       tsConfig,

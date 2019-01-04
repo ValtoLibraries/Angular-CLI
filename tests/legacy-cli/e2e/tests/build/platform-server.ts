@@ -20,9 +20,11 @@ export default function () {
   }
 
   let platformServerVersion = readNgVersion();
+  let httpVersion = readNgVersion();
 
-  if (getGlobalVariable('argv').nightly) {
+  if (getGlobalVariable('argv')['ng-snapshots']) {
     platformServerVersion = 'github:angular/platform-server-builds';
+    httpVersion = 'github:angular/http-builds';
   }
 
   // Skip this test in Angular 2/4.
@@ -34,16 +36,18 @@ export default function () {
     .then(() => updateJsonFile('package.json', packageJson => {
       const dependencies = packageJson['dependencies'];
       dependencies['@angular/platform-server'] = platformServerVersion;
+      // ServerModule depends on @angular/http regardless the app's dependency.
+      dependencies['@angular/http'] = httpVersion;
     }))
     .then(() => updateJsonFile('angular.json', workspaceJson => {
-      const appArchitect = workspaceJson.projects['test-project'].targets;
+      const appArchitect = workspaceJson.projects['test-project'].architect;
       appArchitect['server'] = {
         builder: '@angular-devkit/build-angular:server',
         options: {
           outputPath: 'dist/test-project-server',
           main: 'src/main.server.ts',
-          tsConfig: 'src/tsconfig.server.json'
-        }
+          tsConfig: 'src/tsconfig.server.json',
+        },
       };
     }))
     .then(() => writeFile('./src/tsconfig.server.json', `

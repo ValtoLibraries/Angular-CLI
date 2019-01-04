@@ -75,12 +75,14 @@ function _createAotPlugin(
     locale: buildOptions.i18nLocale,
     platform: buildOptions.platform === 'server' ? PLATFORM.Server : PLATFORM.Browser,
     missingTranslation: buildOptions.i18nMissingTranslation,
-    sourceMap: buildOptions.sourceMap,
+    sourceMap: buildOptions.sourceMap.scripts,
     additionalLazyModules,
     hostReplacementPaths,
     nameLazyFiles: buildOptions.namedChunks,
     forkTypeChecker: buildOptions.forkTypeChecker,
     contextElementDependencyConstructor: require('webpack/lib/dependencies/ContextElementDependency'),
+    logger: wco.logger,
+    directTemplateLoading: true,
     ...options,
   };
   return new AngularCompilerPlugin(pluginOptions);
@@ -106,11 +108,11 @@ export function getAotConfig(
   if (buildOptions.buildOptimizer) {
     loaders.unshift({
       loader: buildOptimizerLoader,
-      options: { sourceMap: buildOptions.sourceMap }
+      options: { sourceMap: buildOptions.sourceMap.scripts }
     });
   }
 
-  const test = /(?:\.ngfactory\.js|\.ngstyle\.js|\.ts)$/;
+  const test = /(?:\.ngfactory\.js|\.ngstyle\.js|\.tsx?)$/;
 
   return {
     module: { rules: [{ test, use: loaders }] },

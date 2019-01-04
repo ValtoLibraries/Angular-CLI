@@ -5,10 +5,10 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-// tslint:disable
-// TODO: cleanup this file, it's copied as is from Angular CLI.
-
+import { Configuration } from 'webpack';
 import { WebpackConfigOptions } from '../build-options';
+import { getSourceMapDevTool } from './utils';
+
 
 /**
  * Returns a partial specific to creating a bundle for node
@@ -16,8 +16,18 @@ import { WebpackConfigOptions } from '../build-options';
  */
 export function getServerConfig(wco: WebpackConfigOptions) {
 
-  const config: any = {
-    devtool: wco.buildOptions.sourceMap ? 'source-map' : false,
+  const extraPlugins = [];
+  if (wco.buildOptions.sourceMap) {
+    const { scripts, styles, hidden } = wco.buildOptions.sourceMap;
+
+    extraPlugins.push(getSourceMapDevTool(
+      scripts,
+      styles,
+      hidden,
+    ));
+  }
+
+  const config: Configuration = {
     resolve: {
       mainFields: [
         ...(wco.supportES2015 ? ['es2015'] : []),
@@ -26,14 +36,16 @@ export function getServerConfig(wco: WebpackConfigOptions) {
     },
     target: 'node',
     output: {
-      libraryTarget: 'commonjs'
+      libraryTarget: 'commonjs',
     },
+    plugins: extraPlugins,
     node: false,
   };
 
   if (wco.buildOptions.bundleDependencies == 'none') {
     config.externals = [
       /^@angular/,
+      // tslint:disable-next-line:no-any
       (_: any, request: any, callback: (error?: any, result?: any) => void) => {
         // Absolute & Relative paths are not externals
         if (request.match(/^\.{0,2}\//)) {
@@ -54,7 +66,7 @@ export function getServerConfig(wco: WebpackConfigOptions) {
           // Node couldn't find it, so it must be user-aliased
           callback();
         }
-      }
+      },
     ];
   }
 

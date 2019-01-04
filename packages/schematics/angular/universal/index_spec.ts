@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
 import { Schema as UniversalOptions } from './schema';
@@ -14,7 +13,7 @@ import { Schema as UniversalOptions } from './schema';
 describe('Universal Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: UniversalOptions = {
     clientProject: 'bar',
@@ -88,8 +87,8 @@ describe('Universal Schematic', () => {
       },
     });
     const angularConfig = JSON.parse(tree.readContent('angular.json'));
-    expect(angularConfig.projects.workspace.targets.server.options.tsConfig)
-      .toEqual('src/tsconfig.server.json');
+    expect(angularConfig.projects.workspace.architect
+      .server.options.tsConfig).toEqual('src/tsconfig.server.json');
   });
 
   it('should create a tsconfig file for a generated application', () => {
@@ -108,8 +107,8 @@ describe('Universal Schematic', () => {
       },
     });
     const angularConfig = JSON.parse(tree.readContent('angular.json'));
-    expect(angularConfig.projects.bar.targets.server.options.tsConfig)
-      .toEqual('projects/bar/tsconfig.server.json');
+    expect(angularConfig.projects.bar.architect
+      .server.options.tsConfig).toEqual('projects/bar/tsconfig.server.json');
   });
 
   it('should add dependency: @angular/platform-server', () => {
@@ -124,13 +123,20 @@ describe('Universal Schematic', () => {
     const filePath = '/angular.json';
     const contents = tree.readContent(filePath);
     const config = JSON.parse(contents.toString());
-    const targets = config.projects.bar.targets;
+    const targets = config.projects.bar.architect;
     expect(targets.server).toBeDefined();
     expect(targets.server.builder).toBeDefined();
     const opts = targets.server.options;
     expect(opts.outputPath).toEqual('dist/bar-server');
     expect(opts.main).toEqual('projects/bar/src/main.server.ts');
     expect(opts.tsConfig).toEqual('projects/bar/tsconfig.server.json');
+    const configurations = targets.server.configurations;
+    expect(configurations.production).toBeDefined();
+    expect(configurations.production.fileReplacements).toBeDefined();
+    const fileReplacements = targets.server.configurations.production.fileReplacements;
+    expect(fileReplacements.length).toEqual(1);
+    expect(fileReplacements[0].replace).toEqual('projects/bar/src/environments/environment.ts');
+    expect(fileReplacements[0].with).toEqual('projects/bar/src/environments/environment.prod.ts');
   });
 
   it('should add a server transition to BrowerModule import', () => {
@@ -145,6 +151,36 @@ describe('Universal Schematic', () => {
     const filePath = '/projects/bar/src/main.ts';
     const contents = tree.readContent(filePath);
     expect(contents).toMatch(/document.addEventListener\('DOMContentLoaded', \(\) => {/);
+  });
+
+  it('should wrap the bootstrap decleration in a DOMContentLoaded event handler', () => {
+    const filePath = '/projects/bar/src/main.ts';
+    appTree.overwrite(
+      filePath,
+      `
+      import { enableProdMode } from '@angular/core';
+      import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
+      import { AppModule } from './app/app.module';
+      import { environment } from './environments/environment';
+      import { hmrBootstrap } from './hmr';
+
+      if (environment.production) {
+        enableProdMode();
+      }
+
+      const bootstrap = () => platformBrowserDynamic().bootstrapModule(AppModule);
+
+      if (!hmrBootstrap) {
+        bootstrap().catch(err => console.log(err));
+      }
+      `,
+    );
+
+    const tree = schematicRunner.runSchematic('universal', defaultOptions, appTree);
+    const contents = tree.readContent(filePath);
+    expect(contents).toMatch(
+      /document.addEventListener\('DOMContentLoaded', \(\) => {[\n\r\s]+bootstrap\(\)/,
+    );
   });
 
   it('should install npm dependencies', () => {

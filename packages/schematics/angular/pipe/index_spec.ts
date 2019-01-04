@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { createAppModule, getFileContent } from '../utility/test';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
@@ -16,7 +15,7 @@ import { Schema as PipeOptions } from './schema';
 describe('Pipe Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: PipeOptions = {
     name: 'foo',
@@ -53,8 +52,8 @@ describe('Pipe Schematic', () => {
 
     const tree = schematicRunner.runSchematic('pipe', options, appTree);
     const files = tree.files;
-    expect(files.indexOf('/projects/bar/src/app/foo.pipe.spec.ts')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo.pipe.ts')).toBeGreaterThanOrEqual(0);
+    expect(files).toContain('/projects/bar/src/app/foo.pipe.spec.ts');
+    expect(files).toContain('/projects/bar/src/app/foo.pipe.ts');
     const moduleContent = getFileContent(tree, '/projects/bar/src/app/app.module.ts');
     expect(moduleContent).toMatch(/import.*Foo.*from '.\/foo.pipe'/);
     expect(moduleContent).toMatch(/declarations:\s*\[[^\]]+?,\r?\n\s+FooPipe\r?\n/m);
@@ -80,6 +79,20 @@ describe('Pipe Schematic', () => {
     expect(thrownError).toBeDefined();
   });
 
+  it('should handle a path in the name and module options', () => {
+    appTree = schematicRunner.runSchematic(
+      'module',
+      { name: 'admin/module', project: 'bar' },
+      appTree,
+    );
+
+    const options = { ...defaultOptions, module: 'admin/module' };
+    appTree = schematicRunner.runSchematic('pipe', options, appTree);
+
+    const content = appTree.readContent('/projects/bar/src/app/admin/module/module.module.ts');
+    expect(content).toMatch(/import { FooPipe } from '\.\.\/\.\.\/foo.pipe'/);
+  });
+
   it('should export the pipe', () => {
     const options = { ...defaultOptions, export: true };
 
@@ -93,8 +106,8 @@ describe('Pipe Schematic', () => {
 
     const tree = schematicRunner.runSchematic('pipe', options, appTree);
     const files = tree.files;
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.pipe.spec.ts')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.pipe.ts')).toBeGreaterThanOrEqual(0);
+    expect(files).toContain('/projects/bar/src/app/foo/foo.pipe.spec.ts');
+    expect(files).toContain('/projects/bar/src/app/foo/foo.pipe.ts');
     const moduleContent = getFileContent(tree, '/projects/bar/src/app/app.module.ts');
     expect(moduleContent).toMatch(/import.*Foo.*from '.\/foo\/foo.pipe'/);
     expect(moduleContent).toMatch(/declarations:\s*\[[^\]]+?,\r?\n\s+FooPipe\r?\n/m);
@@ -121,7 +134,6 @@ describe('Pipe Schematic', () => {
     // move the module
     appTree.rename('/projects/bar/src/app/app.module.ts', '/projects/bar/custom/app/app.module.ts');
     appTree = schematicRunner.runSchematic('pipe', defaultOptions, appTree);
-    expect(appTree.files.indexOf('/projects/bar/custom/app/foo.pipe.ts'))
-      .toBeGreaterThanOrEqual(0);
+    expect(appTree.files).toContain('/projects/bar/custom/app/foo.pipe.ts');
   });
 });

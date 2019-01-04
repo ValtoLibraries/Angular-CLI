@@ -41,17 +41,6 @@ export class Version {
     let angularPkgJson;
     let rxjsPkgJson;
 
-    const isInside = (base: string, potential: string): boolean => {
-      const absoluteBase = path.resolve(base);
-      const absolutePotential = path.resolve(potential);
-      const relativePotential = path.relative(absoluteBase, absolutePotential);
-      if (!relativePotential.startsWith('..') && !path.isAbsolute(relativePotential)) {
-        return true;
-      }
-
-      return false;
-    };
-
     try {
       const resolveOptions = {
         basedir: projectRoot,
@@ -60,11 +49,6 @@ export class Version {
       };
       const angularPackagePath = resolve('@angular/core/package.json', resolveOptions);
       const rxjsPackagePath = resolve('rxjs/package.json', resolveOptions);
-
-      if (!isInside(projectRoot, angularPackagePath)
-          || !isInside(projectRoot, rxjsPackagePath)) {
-        throw new Error();
-      }
 
       angularPkgJson = require(angularPackagePath);
       rxjsPkgJson = require(rxjsPackagePath);
@@ -182,7 +166,7 @@ export class Version {
 
         Please run the following command to install a compatible version of TypeScript.
 
-            npm install typescript@'${currentCombo.typescript}'
+            npm install typescript@"${currentCombo.typescript}"
 
         To disable this warning run "ng config cli.warnings.typescriptMismatch false".
       ` + '\n')));

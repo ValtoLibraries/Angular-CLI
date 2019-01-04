@@ -9,7 +9,7 @@
 
 import { DefaultTimeout, TestLogger, runTargetSpec } from '@angular-devkit/architect/testing';
 import { join, normalize, virtualFs } from '@angular-devkit/core';
-import { debounceTime, take, tap } from 'rxjs/operators';
+import { debounceTime, take, takeWhile, tap } from 'rxjs/operators';
 import { browserTargetSpec, host } from '../utils';
 import { lazyModuleFiles, lazyModuleImport } from './lazy-module_spec_large';
 
@@ -65,29 +65,28 @@ describe('Browser Builder rebuilds', () => {
 
     const overrides = { watch: true };
 
-    let buildNumber = 0;
-
+    let buildCount = 0;
+    let phase = 1;
     runTargetSpec(host, browserTargetSpec, overrides, DefaultTimeout * 3).pipe(
-      // We must debounce on watch mode because file watchers are not very accurate.
-      // Changes from just before a process runs can be picked up and cause rebuilds.
-      // In this case, cleanup from the test right before this one causes a few rebuilds.
-      debounceTime(1000),
-      tap((buildEvent) => expect(buildEvent.success).toBe(true)),
+      tap((buildEvent) => expect(buildEvent.success).toBe(true, 'build should succeed')),
       tap(() => {
-        buildNumber += 1;
-        switch (buildNumber) {
+        buildCount++;
+        const hasLazyChunk = host.scopedSync().exists(join(outputPath, 'lazy-lazy-module.js'));
+        switch (phase) {
           case 1:
             // No lazy chunk should exist.
-            expect(host.scopedSync().exists(join(outputPath, 'lazy-module.js'))).toBe(false);
-            // Write the lazy chunk files. Order matters when writing these, because of imports.
-            host.writeMultipleFiles(lazyModuleFiles);
-            host.writeMultipleFiles(lazyModuleImport);
+            if (!hasLazyChunk) {
+              phase = 2;
+              host.writeMultipleFiles({ ...lazyModuleFiles, ...lazyModuleImport });
+            }
             break;
 
           case 2:
             // A lazy chunk should have been with the filename.
-            expect(host.scopedSync().exists(join(outputPath, 'lazy-lazy-module.js'))).toBe(true);
-            host.writeMultipleFiles(goldenValueFiles);
+            if (hasLazyChunk) {
+              phase = 3;
+              host.writeMultipleFiles(goldenValueFiles);
+            }
             break;
 
           case 3:
@@ -101,15 +100,18 @@ describe('Browser Builder rebuilds', () => {
             const content = virtualFs.fileBufferToString(
               host.scopedSync().read(normalize(fileName)),
             );
-            expect(content).toMatch(re);
-            break;
 
-          default:
+            if (re.test(content)) {
+              phase = 4;
+            }
             break;
         }
       }),
-      take(3),
-    ).toPromise().then(done, done.fail);
+      takeWhile(() => phase < 4),
+      ).toPromise().then(
+        () => done(),
+        () => done.fail(`stuck at phase ${phase} [builds: ${buildCount}]`),
+      );
   });
 
   it('rebuilds on CSS changes', (done) => {
@@ -196,6 +198,33 @@ describe('Browser Builder rebuilds', () => {
     ).toPromise().then(done, done.fail);
   });
 
+  it('rebuilds shows error', (done) => {
+    host.replaceInFile('./src/app/app.component.ts', 'AppComponent', 'AppComponentZ');
+
+    const overrides = { watch: true, aot: false };
+    let buildCount = 1;
+    const logger = new TestLogger('rebuild-errors');
+
+    runTargetSpec(host, browserTargetSpec, overrides, DefaultTimeout * 3, logger).pipe(
+      tap((buildEvent) => {
+        switch (buildCount) {
+          case 1:
+            expect(buildEvent.success).toBe(false);
+            expect(logger.includes('AppComponent cannot be used as an entry component')).toBe(true);
+            logger.clear();
+
+            host.replaceInFile('./src/app/app.component.ts', 'AppComponentZ', 'AppComponent');
+            break;
+
+          default:
+            expect(buildEvent.success).toBe(true);
+            break;
+        }
+        buildCount ++;
+      }),
+      take(2),
+    ).toPromise().then(done, done.fail);
+  });
 
   it('rebuilds after errors in AOT', (done) => {
     // Save the original contents of `./src/app/app.component.ts`.
@@ -204,7 +233,7 @@ describe('Browser Builder rebuilds', () => {
     // Add a major static analysis error on a non-main file to the initial build.
     host.replaceInFile('./src/app/app.component.ts', `'app-root'`, `(() => 'app-root')()`);
 
-    const overrides = { watch: true, aot: true, forkTypeChecker: false };
+    const overrides = { watch: true, aot: true };
     const logger = new TestLogger('rebuild-aot-errors');
     const staticAnalysisError = 'Function expressions are not supported in decorators';
     const syntaxError = 'Declaration or statement expected.';
@@ -269,7 +298,7 @@ describe('Browser Builder rebuilds', () => {
       'src/app/imported-styles.css': 'p {color: #f00;}',
     });
 
-    const overrides = { watch: true, aot: true, forkTypeChecker: false };
+    const overrides = { watch: true, aot: true };
     let buildNumber = 0;
 
     runTargetSpec(host, browserTargetSpec, overrides, DefaultTimeout * 3).pipe(

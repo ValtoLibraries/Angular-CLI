@@ -22,17 +22,19 @@ import {
 } from '@angular-devkit/schematics';
 import { NodePackageInstallTask } from '@angular-devkit/schematics/tasks';
 import {
-  WorkspaceProject,
-  WorkspaceSchema,
   addProjectToWorkspace,
   getWorkspace,
 } from '../utility/config';
-import {
-  NodeDependencyType,
-  addPackageJsonDependency,
-} from '../utility/dependencies';
+import { NodeDependencyType, addPackageJsonDependency } from '../utility/dependencies';
 import { latestVersions } from '../utility/latest-versions';
+import { applyLintFix } from '../utility/lint-fix';
 import { validateProjectName } from '../utility/validation';
+import {
+  Builders,
+  ProjectType,
+  WorkspaceProject,
+  WorkspaceSchema,
+} from '../utility/workspace-models';
 import { Schema as LibraryOptions } from './schema';
 
 interface UpdateJsonFn<T> {
@@ -106,17 +108,17 @@ function addDependenciesToPackageJson() {
       {
         type: NodeDependencyType.Dev,
         name: 'ng-packagr',
-        version: '^4.1.0',
+        version: '^4.2.0',
       },
       {
         type: NodeDependencyType.Dev,
         name: 'tsickle',
-        version: '>=0.29.0',
+        version: '>=0.34.0',
       },
       {
         type: NodeDependencyType.Dev,
         name: 'tslib',
-        version: '^1.9.0',
+        version: latestVersions.TsLib,
       },
       {
         type: NodeDependencyType.Dev,
@@ -130,23 +132,23 @@ function addDependenciesToPackageJson() {
 }
 
 function addAppToWorkspaceFile(options: LibraryOptions, workspace: WorkspaceSchema,
-                               projectRoot: string, packageName: string): Rule {
+                               projectRoot: string, projectName: string): Rule {
 
-  const project: WorkspaceProject = {
-    root: `${projectRoot}`,
+  const project: WorkspaceProject<ProjectType.Library> = {
+    root: projectRoot,
     sourceRoot: `${projectRoot}/src`,
-    projectType: 'library',
+    projectType: ProjectType.Library,
     prefix: options.prefix || 'lib',
-    targets: {
+    architect: {
       build: {
-        builder: '@angular-devkit/build-ng-packagr:build',
+        builder: Builders.NgPackagr,
         options: {
           tsConfig: `${projectRoot}/tsconfig.lib.json`,
           project: `${projectRoot}/ng-package.json`,
         },
       },
       test: {
-        builder: '@angular-devkit/build-angular:karma',
+        builder: Builders.Karma,
         options: {
           main: `${projectRoot}/src/test.ts`,
           tsConfig: `${projectRoot}/tsconfig.spec.json`,
@@ -154,7 +156,7 @@ function addAppToWorkspaceFile(options: LibraryOptions, workspace: WorkspaceSche
         },
       },
       lint: {
-        builder: '@angular-devkit/build-angular:tslint',
+        builder: Builders.TsLint,
         options: {
           tsConfig: [
             `${projectRoot}/tsconfig.lib.json`,
@@ -168,7 +170,7 @@ function addAppToWorkspaceFile(options: LibraryOptions, workspace: WorkspaceSche
     },
   };
 
-  return addProjectToWorkspace(workspace, packageName, project);
+  return addProjectToWorkspace(workspace, projectName, project);
 }
 
 export default function (options: LibraryOptions): Rule {
@@ -181,7 +183,8 @@ export default function (options: LibraryOptions): Rule {
     validateProjectName(options.name);
 
     // If scoped project (i.e. "@foo/bar"), convert projectDir to "foo/bar".
-    const packageName = options.name;
+    const projectName = options.name;
+    const packageName = strings.dasherize(projectName);
     let scopeName = null;
     if (/^@.*\/.*/.test(options.name)) {
       const [scope, name] = options.name.split('/');
@@ -209,6 +212,7 @@ export default function (options: LibraryOptions): Rule {
         distRoot,
         relativePathToWorkspaceRoot,
         prefix,
+        angularLatestVersion: latestVersions.Angular.replace('~', '').replace('^', ''),
       }),
       // TODO: Moving inside `branchAndMerge` should work but is bugged right now.
       // The __projectRoot__ is being used meanwhile.
@@ -217,7 +221,7 @@ export default function (options: LibraryOptions): Rule {
 
     return chain([
       branchAndMerge(mergeWith(templateSource)),
-      addAppToWorkspaceFile(options, workspace, projectRoot, packageName),
+      addAppToWorkspaceFile(options, workspace, projectRoot, projectName),
       options.skipPackageJson ? noop() : addDependenciesToPackageJson(),
       options.skipTsConfig ? noop() : updateTsConfig(packageName, distRoot),
       schematic('module', {
@@ -225,7 +229,6 @@ export default function (options: LibraryOptions): Rule {
         commonModule: false,
         flat: true,
         path: sourceDir,
-        spec: false,
         project: options.name,
       }),
       schematic('component', {
@@ -244,6 +247,7 @@ export default function (options: LibraryOptions): Rule {
         path: sourceDir,
         project: options.name,
       }),
+      options.lintFix ? applyLintFix(sourceDir) : noop(),
       (_tree: Tree, context: SchematicContext) => {
         if (!options.skipPackageJson && !options.skipInstall) {
           context.addTask(new NodePackageInstallTask());

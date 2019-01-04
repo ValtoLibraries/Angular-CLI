@@ -7,26 +7,25 @@
  */
 // tslint:disable:no-big-function
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { createAppModule } from '../utility/test';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
-import { Schema as ComponentOptions } from './schema';
+import { ChangeDetection, Schema as ComponentOptions } from './schema';
 
 // tslint:disable:max-line-length
 describe('Component Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: ComponentOptions = {
     name: 'foo',
     // path: 'src/app',
     inlineStyle: false,
     inlineTemplate: false,
-    changeDetection: 'Default',
-    styleext: 'css',
-    spec: true,
+    changeDetection: ChangeDetection.Default,
+    style: 'css',
+    skipTests: false,
     module: undefined,
     export: false,
     project: 'bar',
@@ -58,10 +57,12 @@ describe('Component Schematic', () => {
     const options = { ...defaultOptions };
     const tree = schematicRunner.runSchematic('component', options, appTree);
     const files = tree.files;
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.component.css')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.component.html')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.component.spec.ts')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo/foo.component.ts')).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      '/projects/bar/src/app/foo/foo.component.css',
+      '/projects/bar/src/app/foo/foo.component.html',
+      '/projects/bar/src/app/foo/foo.component.spec.ts',
+      '/projects/bar/src/app/foo/foo.component.ts',
+    ]));
     const moduleContent = tree.readContent('/projects/bar/src/app/app.module.ts');
     expect(moduleContent).toMatch(/import.*Foo.*from '.\/foo\/foo.component'/);
     expect(moduleContent).toMatch(/declarations:\s*\[[^\]]+?,\r?\n\s+FooComponent\r?\n/m);
@@ -104,10 +105,12 @@ describe('Component Schematic', () => {
 
     const tree = schematicRunner.runSchematic('component', options, appTree);
     const files = tree.files;
-    expect(files.indexOf('/projects/bar/src/app/foo.component.css')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo.component.html')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo.component.spec.ts')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/projects/bar/src/app/foo.component.ts')).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      '/projects/bar/src/app/foo.component.css',
+      '/projects/bar/src/app/foo.component.html',
+      '/projects/bar/src/app/foo.component.spec.ts',
+      '/projects/bar/src/app/foo.component.ts',
+    ]));
   });
 
   it('should find the closest module', () => {
@@ -171,19 +174,23 @@ describe('Component Schematic', () => {
     const tree = schematicRunner.runSchematic('component', options, appTree);
     let files = tree.files;
     let root = `/${pathOption}/foo/foo.component`;
-    expect(files.indexOf(`${root}.css`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.html`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.spec.ts`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.ts`)).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      `${root}.css`,
+      `${root}.html`,
+      `${root}.spec.ts`,
+      `${root}.ts`,
+    ]));
 
     const options2 = { ...options, name: 'BAR' };
     const tree2 = schematicRunner.runSchematic('component', options2, tree);
     files = tree2.files;
     root = `/${pathOption}/bar/bar.component`;
-    expect(files.indexOf(`${root}.css`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.html`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.spec.ts`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.ts`)).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      `${root}.css`,
+      `${root}.html`,
+      `${root}.spec.ts`,
+      `${root}.ts`,
+    ]));
   });
 
   it('should create a component in a sub-directory', () => {
@@ -192,10 +199,12 @@ describe('Component Schematic', () => {
     const tree = schematicRunner.runSchematic('component', options, appTree);
     const files = tree.files;
     const root = `/${options.path}/foo/foo.component`;
-    expect(files.indexOf(`${root}.css`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.html`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.spec.ts`)).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf(`${root}.ts`)).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      `${root}.css`,
+      `${root}.html`,
+      `${root}.spec.ts`,
+      `${root}.ts`,
+    ]));
   });
 
   it('should use the prefix', () => {
@@ -228,7 +237,7 @@ describe('Component Schematic', () => {
     const content = tree.readContent('/projects/bar/src/app/foo/foo.component.ts');
     expect(content).toMatch(/template: /);
     expect(content).not.toMatch(/templateUrl: /);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo/foo.component.html')).toEqual(-1);
+    expect(tree.files).not.toContain('/projects/bar/src/app/foo/foo.component.html');
   });
 
   it('should respect the inlineStyle option', () => {
@@ -237,17 +246,16 @@ describe('Component Schematic', () => {
     const content = tree.readContent('/projects/bar/src/app/foo/foo.component.ts');
     expect(content).toMatch(/styles: \[/);
     expect(content).not.toMatch(/styleUrls: /);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo/foo.component.css')).toEqual(-1);
+    expect(tree.files).not.toContain('/projects/bar/src/app/foo/foo.component.css');
   });
 
-  it('should respect the styleext option', () => {
-    const options = { ...defaultOptions, styleext: 'scss' };
+  it('should respect the style option', () => {
+    const options = { ...defaultOptions, style: 'scss' };
     const tree = schematicRunner.runSchematic('component', options, appTree);
     const content = tree.readContent('/projects/bar/src/app/foo/foo.component.ts');
     expect(content).toMatch(/styleUrls: \['.\/foo.component.scss/);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo/foo.component.scss'))
-      .toBeGreaterThanOrEqual(0);
-    expect(tree.files.indexOf('/projects/bar/src/app/foo/foo.component.css')).toEqual(-1);
+    expect(tree.files).toContain('/projects/bar/src/app/foo/foo.component.scss');
+    expect(tree.files).not.toContain('/projects/bar/src/app/foo/foo.component.css');
   });
 
   it('should use the module flag even if the module is a routing module', () => {
@@ -300,7 +308,36 @@ describe('Component Schematic', () => {
     // move the module
     appTree.rename('/projects/bar/src/app/app.module.ts', '/projects/bar/custom/app/app.module.ts');
     appTree = schematicRunner.runSchematic('component', defaultOptions, appTree);
-    expect(appTree.files.indexOf('/projects/bar/custom/app/foo/foo.component.ts'))
-      .toBeGreaterThanOrEqual(0);
+    expect(appTree.files).toContain('/projects/bar/custom/app/foo/foo.component.ts');
   });
+
+  // testing deprecating options don't cause conflicts
+  it('should respect the deprecated styleext (scss) option', () => {
+    const options = { ...defaultOptions, style: undefined, styleext: 'scss' };
+    const tree = schematicRunner.runSchematic('component', options, appTree);
+    const files = tree.files;
+    expect(files).toContain('/projects/bar/src/app/foo/foo.component.scss');
+  });
+
+  it('should respect the deprecated styleext (css) option', () => {
+    const options = { ...defaultOptions, style: undefined, styleext: 'css' };
+    const tree = schematicRunner.runSchematic('component', options, appTree);
+    const files = tree.files;
+    expect(files).toContain('/projects/bar/src/app/foo/foo.component.css');
+  });
+
+  it('should respect the deprecated spec option when false', () => {
+    const options = { ...defaultOptions, skipTests: undefined, spec: false };
+    const tree = schematicRunner.runSchematic('component', options, appTree);
+    const files = tree.files;
+    expect(files).not.toContain('/projects/bar/src/app/foo/foo.component.spec.ts');
+  });
+
+  it('should respect the deprecated spec option when true', () => {
+    const options = { ...defaultOptions, skipTests: false, spec: true };
+    const tree = schematicRunner.runSchematic('component', options, appTree);
+    const files = tree.files;
+    expect(files).toContain('/projects/bar/src/app/foo/foo.component.spec.ts');
+  });
+
 });

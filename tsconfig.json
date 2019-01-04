@@ -22,16 +22,20 @@
     // source in devtools.
     "inlineSources": true,
     "strictNullChecks": true,
-    "target": "es2016",
+    "target": "es2017",
     "lib": [
       "es2017"
     ],
     "baseUrl": "",
+    "rootDirs": [
+      ".",
+      "./dist-schema/",
+      "./bazel-bin/"
+    ],
     "typeRoots": [
       "./node_modules/@types"
     ],
     "types": [
-      "jasmine",
       "node"
     ],
     "paths": {
@@ -59,11 +63,15 @@
   "exclude": [
     "bazel-*/**/*",
     "dist/**/*",
+    "etc/cli.angular.io",
     "node_modules/**/*",
     "packages/_/devkit/**/*files/**/*",
     "packages/schematics/*/*/*files/**/*",
     "tmp/**/*",
     "scripts/patches/**/*",
-    "tests/**/*"
+    "tests/**/*",
+    "tools/**/*",
+    "benchmark/**/*",
+    "etc/api/**/*"
   ]
 }

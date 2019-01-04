@@ -9,12 +9,6 @@ licenses(["notice"])  # MIT License
 exports_files([
     "LICENSE",
     "tsconfig.json",  # @external
+    "tsconfig-test.json",  # @external
+    "tslint.base.json",  # @external
 ])
-
-# NOTE: this will move to node_modules/BUILD in a later release
-# @external_begin
-filegroup(
-    name = "node_modules",
-    srcs = glob(["node_modules/**/*"]),
-)
-# @external_end

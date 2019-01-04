@@ -64,20 +64,18 @@ const ignoredPackages = [
   // Us.
   '@angular/devkit-repo@0.0.0',  // Hey, that's us!
   // * Development only
-  'spdx-license-ids@3.0.0',  // CC0 but it's content only (index.json, no code) and not distributed.
-  'tslint-sonarts@1.7.0', // LGPL-3.0 but only used as a tool, not linked in the build.
+  'spdx-license-ids@3.0.1',  // CC0 but it's content only (index.json, no code) and not distributed.
+  'tslint-sonarts@1.8.0', // LGPL-3.0 but only used as a tool, not linked in the build.
 
   // * Broken license fields
   'bitsyntax@0.0.4', // MIT but no license field in package.json
   'pako@1.0.6', // MIT but broken license in package.json
   'true-case-path@1.0.2', // Apache-2.0 but broken license in package.json
+  'uws@9.14.0', // zlib license
 
   // * Other
-  'jsonify@0.0.0', // TODO(hansl): fix this. this is not an acceptable license, but is 8 deps down
-                   // so hard to manage. In talk with owner and users to switch over.
-  'uws@9.14.0', // Zlib -- TODO(filipesilva): remove this when karma is moved to e2e tests.
-  // TODO(filipesilva): remove this when spec_large is moved to e2e tests.
   'font-awesome@4.7.0', // (OFL-1.1 AND MIT)
+  'stream-json@0.5.2', // 'New BSD'
 ];
 
 // Ignore own packages (all MIT)

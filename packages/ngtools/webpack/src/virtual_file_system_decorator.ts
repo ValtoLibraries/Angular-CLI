@@ -5,88 +5,82 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import { Path, getSystemPath, normalize } from '@angular-devkit/core';
+import { FileDoesNotExistException, Path, getSystemPath, normalize } from '@angular-devkit/core';
 import { Stats } from 'fs';
+import { InputFileSystem } from 'webpack';
 import { WebpackCompilerHost } from './compiler_host';
-import { Callback, InputFileSystem, NodeWatchFileSystemInterface } from './webpack';
+import { Callback, NodeWatchFileSystemInterface } from './webpack';
 
 export const NodeWatchFileSystem: NodeWatchFileSystemInterface = require(
   'webpack/lib/node/NodeWatchFileSystem');
 
+// NOTE: @types/webpack InputFileSystem is missing some methods
 export class VirtualFileSystemDecorator implements InputFileSystem {
   constructor(
     private _inputFileSystem: InputFileSystem,
     private _webpackCompilerHost: WebpackCompilerHost,
   ) { }
 
-  private _readFileSync(path: string): Buffer | null {
-    if (this._webpackCompilerHost.fileExists(path)) {
-      return this._webpackCompilerHost.readFileBuffer(path) || null;
-    }
-
-    return null;
-  }
-
-  private _statSync(path: string): Stats | null {
-    if (this._webpackCompilerHost.fileExists(path)) {
-      return this._webpackCompilerHost.stat(path);
-    }
-
-    return null;
-  }
-
   getVirtualFilesPaths() {
     return this._webpackCompilerHost.getNgFactoryPaths();
   }
 
-  stat(path: string, callback: Callback<Stats>): void {
-    const result = this._statSync(path);
+  stat(path: string, callback: (err: Error, stats: Stats) => void): void {
+    const result = this._webpackCompilerHost.stat(path);
     if (result) {
-      callback(null, result);
+      // tslint:disable-next-line:no-any
+      callback(null as any, result);
     } else {
-      this._inputFileSystem.stat(path, callback);
+      // tslint:disable-next-line:no-any
+      callback(new FileDoesNotExistException(path), undefined as any);
     }
   }
 
   readdir(path: string, callback: Callback<string[]>): void {
-    this._inputFileSystem.readdir(path, callback);
+    // tslint:disable-next-line:no-any
+    (this._inputFileSystem as any).readdir(path, callback);
   }
 
-  readFile(path: string, callback: Callback<Buffer>): void {
-    const result = this._readFileSync(path);
-    if (result) {
-      callback(null, result);
-    } else {
-      this._inputFileSystem.readFile(path, callback);
+  readFile(path: string, callback: (err: Error, contents: Buffer) => void): void {
+    try {
+      // tslint:disable-next-line:no-any
+      callback(null as any, this._webpackCompilerHost.readFileBuffer(path));
+    } catch (e) {
+      // tslint:disable-next-line:no-any
+      callback(e, undefined as any);
     }
   }
 
   readJson(path: string, callback: Callback<{}>): void {
-    this._inputFileSystem.readJson(path, callback);
+    // tslint:disable-next-line:no-any
+    (this._inputFileSystem as any).readJson(path, callback);
   }
 
-  readlink(path: string, callback: Callback<string>): void {
+  readlink(path: string, callback: (err: Error, linkString: string) => void): void {
     this._inputFileSystem.readlink(path, callback);
   }
 
   statSync(path: string): Stats {
-    const result = this._statSync(path);
+    const stats = this._webpackCompilerHost.stat(path);
+    if (stats === null) {
+      throw new FileDoesNotExistException(path);
+    }
 
-    return result || this._inputFileSystem.statSync(path);
+    return stats;
   }
 
   readdirSync(path: string): string[] {
-    return this._inputFileSystem.readdirSync(path);
+    // tslint:disable-next-line:no-any
+    return (this._inputFileSystem as any).readdirSync(path);
   }
 
   readFileSync(path: string): Buffer {
-    const result = this._readFileSync(path);
-
-    return result || this._inputFileSystem.readFileSync(path);
+    return this._webpackCompilerHost.readFileBuffer(path);
   }
 
   readJsonSync(path: string): string {
-    return this._inputFileSystem.readJsonSync(path);
+    // tslint:disable-next-line:no-any
+    return (this._inputFileSystem as any).readJsonSync(path);
   }
 
   readlinkSync(path: string): string {
@@ -100,7 +94,8 @@ export class VirtualFileSystemDecorator implements InputFileSystem {
       changes.forEach((fileName: string) => this._webpackCompilerHost.invalidate(fileName));
     }
     if (this._inputFileSystem.purge) {
-      this._inputFileSystem.purge(changes);
+      // tslint:disable-next-line:no-any
+      (this._inputFileSystem as any).purge(changes);
     }
   }
 }

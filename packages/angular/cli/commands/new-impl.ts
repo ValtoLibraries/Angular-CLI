@@ -7,38 +7,16 @@
  */
 
 // tslint:disable:no-global-tslint-disable no-any
+import { Arguments } from '../models/interface';
 import { SchematicCommand } from '../models/schematic-command';
-import { getDefaultSchematicCollection } from '../utilities/config';
+import { Schema as NewCommandSchema } from './new';
 
 
-export class NewCommand extends SchematicCommand {
+export class NewCommand extends SchematicCommand<NewCommandSchema> {
   public readonly allowMissingWorkspace = true;
-  private schematicName = 'ng-new';
+  schematicName = 'ng-new';
 
-  private initialized = false;
-  public async initialize(options: any) {
-    if (this.initialized) {
-      return;
-    }
-
-    await super.initialize(options);
-
-    this.initialized = true;
-
-    const collectionName = this.parseCollectionName(options);
-
-    const schematicOptions = await this.getOptions({
-      schematicName: this.schematicName,
-      collectionName,
-    });
-    this.addOptions(this.options.concat(schematicOptions));
-  }
-
-  public async run(options: any) {
-    if (options.dryRun) {
-      options.skipGit = true;
-    }
-
+  public async run(options: NewCommandSchema & Arguments) {
     let collectionName: string;
     if (options.collection) {
       collectionName = options.collection;
@@ -46,35 +24,23 @@ export class NewCommand extends SchematicCommand {
       collectionName = this.parseCollectionName(options);
     }
 
+    // Register the version of the CLI in the registry.
     const packageJson = require('../package.json');
-    options.version = packageJson.version;
+    const version = packageJson.version;
 
-    // Ensure skipGit has a boolean value.
-    options.skipGit = options.skipGit === undefined ? false : options.skipGit;
-
-    options = this.removeLocalOptions(options);
+    this._workflow.registry.addSmartDefaultProvider('ng-cli-version', () => version);
 
     return this.runSchematic({
       collectionName: collectionName,
       schematicName: this.schematicName,
-      schematicOptions: options,
-      debug: options.debug,
-      dryRun: options.dryRun,
-      force: options.force,
+      schematicOptions: options['--'] || [],
+      debug: !!options.debug,
+      dryRun: !!options.dryRun,
+      force: !!options.force,
     });
   }
 
   private parseCollectionName(options: any): string {
-    const collectionName = options.collection || options.c || getDefaultSchematicCollection();
-
-    return collectionName;
-  }
-
-  private removeLocalOptions(options: any): any {
-    const opts = Object.assign({}, options);
-    delete opts.verbose;
-    delete opts.collection;
-
-    return opts;
+    return options.collection || this.getDefaultSchematicCollection();
   }
 }

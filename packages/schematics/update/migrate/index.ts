@@ -15,7 +15,7 @@ import {
   externalSchematic,
 } from '@angular-devkit/schematics';
 import * as semver from 'semver';
-import { PostUpdateSchema } from './schema';
+import { Schema as PostUpdateSchema } from './schema';
 
 
 /**
@@ -25,7 +25,6 @@ import { PostUpdateSchema } from './schema';
  *   1-beta => 1.0.0-beta
  *
  * Exported for testing only.
- * @internal
  */
 export function _coerceVersionNumber(version: string): string | null {
   if (!version.match(/^\d{1,30}\.\d{1,30}\.\d{1,30}/)) {

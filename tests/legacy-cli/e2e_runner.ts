@@ -26,11 +26,11 @@ Error.stackTraceLimit = Infinity;
  *                    rerun tests.
  *   --noglobal       Skip linking your local @angular/cli directory. Can save a few seconds.
  *   --nosilent       Never silence ng commands.
- *   --ng-sha=SHA     Use a specific ng-sha. Similar to nightly but point to a master SHA instead
- *                    of using the latest.
+ *   --ng-tag=TAG     Use a specific tag for build snapshots. Similar to ng-snapshots but point to a
+ *                    tag of using the latest master.
+ *   --ng-snapshots   Install angular snapshot builds in the test project.
  *   --glob           Run tests matching this glob pattern (relative to tests/e2e/).
  *   --ignore         Ignore tests matching this glob pattern.
- *   --nightly        Install angular nightly builds over the test project.
  *   --reuse=/path    Use a path instead of create a new project. That project should have been
  *                    created, and npm installed. Ideally you want a project created by a previous
  *                    run of e2e.
@@ -46,13 +46,13 @@ const argv = minimist(process.argv.slice(2), {
     'appveyor',
     'debug',
     'eject',
-    'nightly',
+    'ng-snapshots',
     'noglobal',
     'nosilent',
     'noproject',
     'verbose',
   ],
-  'string': ['devkit', 'glob', 'ignore', 'reuse', 'ng-sha', 'tmpdir', 'ng-version'],
+  'string': ['devkit', 'glob', 'ignore', 'reuse', 'ng-tag', 'tmpdir', 'ng-version'],
   'number': ['nb-shards', 'shard'],
 });
 
@@ -114,7 +114,6 @@ const allTests = glob.sync(path.join(e2eRoot, testGlob), { nodir: true, ignore: 
   // Replace windows slashes.
   .map(name => name.replace(/\\/g, '/'))
   .filter(name => !name.endsWith('/build-app-shell-with-schematic.ts'))
-  .filter(name => !name.endsWith('/new-minimal.ts'))
   // IS this test still valid? \/
   .filter(name => !name.endsWith('/module-id.ts'))
   // Do we want to support this?
@@ -125,10 +124,6 @@ const allTests = glob.sync(path.join(e2eRoot, testGlob), { nodir: true, ignore: 
   .filter(name => !name.includes('tests/commands/new/'))
   // NEEDS devkit change
   .filter(name => !name.endsWith('/existing-directory.ts'))
-  // ngtools/webpack is now in devkit and needs to be tested there
-  .filter(name => !name.endsWith('/packages/webpack/server-ng5.ts'))
-  .filter(name => !name.endsWith('/packages/webpack/test-ng5.ts'))
-  .filter(name => !name.endsWith('/packages/webpack/weird-ng5.ts'))
   // Disabled on rc.0 due to needed sync with devkit for changes.
   .filter(name => !name.endsWith('/service-worker.ts'))
   .sort();

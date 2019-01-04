@@ -1,52 +1,97 @@
-workspace(name = "angular_devkit")
+workspace(name = "angular_cli")
 
+# This is required by Angular Workspace
 http_archive(
-    name = "build_bazel_rules_nodejs",
-    url = "https://github.com/bazelbuild/rules_nodejs/archive/0.4.1.zip",
-    strip_prefix = "rules_nodejs-0.4.1",
-    sha256 = "e9bc013417272b17f302dc169ad597f05561bb277451f010043f4da493417607",
+    name = "bazel_skylib",
+    url = "https://github.com/bazelbuild/bazel-skylib/archive/0.5.0.zip",
+    strip_prefix = "bazel-skylib-0.5.0",
+    sha256 = "ca4e3b8e4da9266c3a9101c8f4704fe2e20eb5625b2a6a7d2d7d45e3dd4efffd",
 )
 
-load("@build_bazel_rules_nodejs//:defs.bzl", "check_bazel_version", "node_repositories")
-
-check_bazel_version("0.9.0")
-node_repositories(package_json = ["//:package.json"])
-
-local_repository(
-    name = "rxjs",
-    path = "node_modules/rxjs/src",
+# We get Buildifier from here.
+http_archive(
+    name = "com_github_bazelbuild_buildtools",
+    url = "https://github.com/bazelbuild/buildtools/archive/0.15.0.zip",
+    strip_prefix = "buildtools-0.15.0",
+    sha256 = "76d1837a86fa6ef5b4a07438f8489f00bfa1b841e5643b618e01232ba884b1fe",
 )
 
-# Pick up the fix for source-map typings
-RULES_TYPESCRIPT_VERSION = "00f8fd5467f2b12ac2fbb8d74ea81d2dd5636d31"
+# Load the TypeScript rules, its dependencies, and setup the workspace.
 http_archive(
     name = "build_bazel_rules_typescript",
-    url = "https://github.com/bazelbuild/rules_typescript/archive/%s.zip" % RULES_TYPESCRIPT_VERSION,
-    strip_prefix = "rules_typescript-%s" % RULES_TYPESCRIPT_VERSION,
-    sha256 = "3606b97a4859cc3f73b47888618b14290cf4b93c411b1bedd821e8bb39b3442b",
+    url = "https://github.com/bazelbuild/rules_typescript/archive/8ea1a55cf5cf8be84ddfeefc0940769b80da792f.zip",
+    strip_prefix = "rules_typescript-8ea1a55cf5cf8be84ddfeefc0940769b80da792f",
 )
 
-load("@build_bazel_rules_typescript//:defs.bzl", "ts_setup_workspace")
+load("@build_bazel_rules_typescript//:package.bzl", "rules_typescript_dependencies")
+# build_bazel_rules_nodejs is loaded transitively through rules_typescript_dependencies.
+rules_typescript_dependencies()
 
-ts_setup_workspace()
+load("@com_github_bazelbuild_buildtools//buildifier:deps.bzl", "buildifier_dependencies")
+buildifier_dependencies()
 
-# We get tools like Buildifier from here
-git_repository(
-    name = "com_github_bazelbuild_buildtools",
-    remote = "https://github.com/bazelbuild/buildtools.git",
-    commit = "b3b620e8bcff18ed3378cd3f35ebeb7016d71f71",
-)
-
-# The Go toolchain is used for Buildifier and some TypeScript tooling.
-http_archive(
-    name = "io_bazel_rules_go",
-    url = "https://github.com/bazelbuild/rules_go/releases/download/0.7.1/rules_go-0.7.1.tar.gz",
-    sha256 = "341d5eacef704415386974bc82a1783a8b7ffbff2ab6ba02375e1ca20d9b031c",
-)
-
-load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
-
+load("@io_bazel_rules_go//go:def.bzl", "go_register_toolchains", "go_rules_dependencies")
 go_rules_dependencies()
-
 go_register_toolchains()
 
+# TS API Guardian resides in Angular
+http_archive(
+    name = "angular",
+    url = "https://github.com/angular/angular/archive/7.1.0-rc.0.zip",
+    strip_prefix = "angular-7.1.0-rc.0",
+    sha256 = "dbf3ae2d60b5384715bc002c695be0141f8c9219396ac1edbdc7023bd400c8a1",
+)
+
+load("@angular//:index.bzl", "ng_setup_workspace")
+ng_setup_workspace()
+
+load("@build_bazel_rules_typescript//:defs.bzl", "ts_setup_workspace")
+ts_setup_workspace()
+
+load("@build_bazel_rules_nodejs//:defs.bzl", "check_bazel_version", "node_repositories", "yarn_install")
+# 0.18.0 is needed for .bazelignore
+check_bazel_version("0.18.0")
+node_repositories(
+    node_version = "10.9.0",
+    yarn_version = "1.9.2",
+    node_repositories = {
+        "10.9.0-darwin_amd64": (
+            "node-v10.9.0-darwin-x64.tar.gz",
+            "node-v10.9.0-darwin-x64",
+            "3c4fe75dacfcc495a432a7ba2dec9045cff359af2a5d7d0429c84a424ef686fc"
+        ),
+        "10.9.0-linux_amd64": (
+            "node-v10.9.0-linux-x64.tar.xz",
+            "node-v10.9.0-linux-x64",
+            "c5acb8b7055ee0b6ac653dc4e458c5db45348cecc564b388f4ed1def84a329ff"
+        ),
+        "10.9.0-windows_amd64": (
+            "node-v10.9.0-win-x64.zip",
+            "node-v10.9.0-win-x64",
+            "6a75cdbb69d62ed242d6cbf0238a470bcbf628567ee339d4d098a5efcda2401e"
+        ),
+    },
+    yarn_repositories = {
+        "1.9.2": (
+            "yarn-v1.9.2.tar.gz",
+            "yarn-v1.9.2",
+            "3ad69cc7f68159a562c676e21998eb21b44138cae7e8fe0749a7d620cf940204"
+        ),
+    },
+)
+
+yarn_install(
+    name = "npm",
+    package_json = "//:package.json",
+    yarn_lock = "//:yarn.lock",
+    data = [
+        "//:tools/yarn/check-yarn.js",
+    ],
+)
+
+http_archive(
+    name = "rxjs",
+    url = "https://registry.yarnpkg.com/rxjs/-/rxjs-6.3.3.tgz",
+    strip_prefix = "package/src",
+    sha256 = "72b0b4e517f43358f554c125e40e39f67688cd2738a8998b4a266981ed32f403",
+)

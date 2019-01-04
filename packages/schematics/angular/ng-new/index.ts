@@ -15,6 +15,7 @@ import {
   empty,
   mergeWith,
   move,
+  noop,
   schematic,
 } from '@angular-devkit/schematics';
 import {
@@ -39,8 +40,8 @@ export default function (options: NgNewOptions): Rule {
   const workspaceOptions: WorkspaceOptions = {
     name: options.name,
     version: options.version,
-    experimentalAngularNext: options.experimentalIvy,
     newProjectRoot: options.newProjectRoot || 'projects',
+    minimal: options.minimal,
   };
   const applicationOptions: ApplicationOptions = {
     projectRoot: '',
@@ -54,13 +55,16 @@ export default function (options: NgNewOptions): Rule {
     style: options.style,
     skipTests: options.skipTests,
     skipPackageJson: false,
+    // always 'skipInstall' here, so that we do it after the move
+    skipInstall: true,
+    minimal: options.minimal,
   };
 
   return chain([
     mergeWith(
       apply(empty(), [
         schematic('workspace', workspaceOptions),
-        schematic('application', applicationOptions),
+        options.createApplication ? schematic('application', applicationOptions) : noop,
         move(options.directory || options.name),
       ]),
     ),

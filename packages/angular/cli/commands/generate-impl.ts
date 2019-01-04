@@ -7,63 +7,75 @@
  */
 
 // tslint:disable:no-global-tslint-disable no-any
-import { tags, terminal } from '@angular-devkit/core';
+import { terminal } from '@angular-devkit/core';
+import { Arguments, SubCommandDescription } from '../models/interface';
 import { SchematicCommand } from '../models/schematic-command';
-import { getDefaultSchematicCollection } from '../utilities/config';
+import { parseJsonSchemaToSubCommandDescription } from '../utilities/json-schema';
+import { Schema as GenerateCommandSchema } from './generate';
 
-
-export class GenerateCommand extends SchematicCommand {
-  private initialized = false;
-  public async initialize(options: any) {
-    if (this.initialized) {
-      return;
-    }
+export class GenerateCommand extends SchematicCommand<GenerateCommandSchema> {
+  async initialize(options: GenerateCommandSchema & Arguments) {
     await super.initialize(options);
-    this.initialized = true;
 
-    const [collectionName, schematicName] = this.parseSchematicInfo(options);
-    if (!!schematicName) {
-      const schematicOptions = await this.getOptions({
-        schematicName,
-        collectionName,
-      });
-      this.addOptions(schematicOptions);
-    }
-  }
-
-  validate(options: any): boolean | Promise<boolean> {
-    if (!options.schematic) {
-      this.logger.error(tags.oneLine`
-        The "ng generate" command requires a
-        schematic name to be specified.
-        For more details, use "ng help".`);
-
-      return false;
-    }
-
-    return true;
-  }
-
-  public run(options: any) {
+    // Fill up the schematics property of the command description.
     const [collectionName, schematicName] = this.parseSchematicInfo(options);
 
-    // remove the schematic name from the options
-    delete options.schematic;
+    const collection = this.getCollection(collectionName);
+    const subcommands: { [name: string]: SubCommandDescription } = {};
+
+    const schematicNames = schematicName ? [schematicName] : collection.listSchematicNames();
+    // Sort as a courtesy for the user.
+    schematicNames.sort();
+
+    for (const name of schematicNames) {
+      const schematic = this.getSchematic(collection, name, true);
+      let subcommand: SubCommandDescription;
+      if (schematic.description.schemaJson) {
+        subcommand = await parseJsonSchemaToSubCommandDescription(
+          name,
+          schematic.description.path,
+          this._workflow.registry,
+          schematic.description.schemaJson,
+        );
+      } else {
+        continue;
+      }
+
+      if (this.getDefaultSchematicCollection() == collectionName) {
+        subcommands[name] = subcommand;
+      } else {
+        subcommands[`${collectionName}:${name}`] = subcommand;
+      }
+    }
+
+    this.description.options.forEach(option => {
+      if (option.name == 'schematic') {
+        option.subcommands = subcommands;
+      }
+    });
+  }
+
+  public async run(options: GenerateCommandSchema & Arguments) {
+    const [collectionName, schematicName] = this.parseSchematicInfo(options);
+
+    if (!schematicName || !collectionName) {
+      return this.printHelp(options);
+    }
 
     return this.runSchematic({
       collectionName,
       schematicName,
-      schematicOptions: options,
-      debug: options.debug,
-      dryRun: options.dryRun,
-      force: options.force,
+      schematicOptions: options['--'] || [],
+      debug: !!options.debug || false,
+      dryRun: !!options.dryRun || false,
+      force: !!options.force || false,
     });
   }
 
-  private parseSchematicInfo(options: any) {
-    let collectionName = getDefaultSchematicCollection();
+  private parseSchematicInfo(options: { schematic?: string }): [string, string | undefined] {
+    let collectionName = this.getDefaultSchematicCollection();
 
-    let schematicName: string = options.schematic;
+    let schematicName = options.schematic;
 
     if (schematicName) {
       if (schematicName.includes(':')) {
@@ -74,26 +86,17 @@ export class GenerateCommand extends SchematicCommand {
     return [collectionName, schematicName];
   }
 
-  public printHelp(_name: string, _description: string, options: any) {
-    const schematicName = options._[0];
-    if (schematicName) {
-      const optsWithoutSchematic = this.options
-        .filter(o => !(o.name === 'schematic' && this.isArgument(o)));
-      this.printHelpUsage(`generate ${schematicName}`, optsWithoutSchematic);
-      this.printHelpOptions(this.options);
-    } else {
-      this.printHelpUsage('generate', this.options);
-      const engineHost = this.getEngineHost();
-      const [collectionName] = this.parseSchematicInfo(options);
-      const collection = this.getCollection(collectionName);
-      const schematicNames: string[] = engineHost.listSchematicNames(collection.description);
-      this.logger.info('Available schematics:');
-      schematicNames.forEach(schematicName => {
-        this.logger.info(`    ${schematicName}`);
-      });
+  public async printHelp(options: GenerateCommandSchema & Arguments) {
+    await super.printHelp(options);
 
-      this.logger.warn(`\nTo see help for a schematic run:`);
+    this.logger.info('');
+    // Find the generate subcommand.
+    const subcommand = this.description.options.filter(x => x.subcommands)[0];
+    if (Object.keys((subcommand && subcommand.subcommands) || {}).length == 1) {
+      this.logger.info(`\nTo see help for a schematic run:`);
       this.logger.info(terminal.cyan(`  ng generate <schematic> --help`));
     }
+
+    return 0;
   }
 }

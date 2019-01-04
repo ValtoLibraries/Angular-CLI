@@ -10,12 +10,14 @@ import { time, timeEnd } from './benchmark';
 import { CancellationToken } from './gather_diagnostics';
 import {
   AUTO_START_ARG,
+  TypeChecker,
+} from './type_checker';
+import {
   InitMessage,
   MESSAGE_KIND,
-  TypeChecker,
   TypeCheckerMessage,
   UpdateMessage,
-} from './type_checker';
+} from './type_checker_messages';
 
 let typeChecker: TypeChecker;
 let lastCancellationToken: CancellationToken;
@@ -32,6 +34,7 @@ if (process.argv.indexOf(AUTO_START_ARG) >= 0) {
           initMessage.basePath,
           initMessage.jitMode,
           initMessage.rootNames,
+          initMessage.hostReplacementPaths,
         );
         break;
       case MESSAGE_KIND.Update:

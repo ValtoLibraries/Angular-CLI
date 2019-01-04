@@ -26,6 +26,7 @@ import {
   HostCapabilities,
   HostWatchOptions,
   ReadonlyHost,
+  Stats,
 } from './interface';
 import { SimpleMemoryHost } from './memory';
 
@@ -366,9 +367,10 @@ export class CordHost extends SimpleMemoryHost {
       : ((this.willDelete(path) || this.willRename(path)) ? of(false) : this._back.isFile(path));
   }
 
-  stat(path: Path) {
-    // TODO: stat should be possible to implement, at least from memory.
-    return null;
+  stat(path: Path): Observable<Stats | null> | null {
+    return this._exists(path)
+      ? super.stat(path)
+      : ((this.willDelete(path) || this.willRename(path)) ? of(null) : this._back.stat(path));
   }
 
   watch(path: Path, options?: HostWatchOptions) {

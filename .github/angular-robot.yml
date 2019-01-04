@@ -91,3 +91,9 @@ triage:
     -
       - "type: docs"
       - "comp: *"
+
+# Size checking
+size:
+  circleCiStatusName: "ci/circleci: e2e-cli"
+  maxSizeIncrease: 10000
+  comment: false

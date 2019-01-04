@@ -7,151 +7,160 @@
  */
 
 // tslint:disable:no-global-tslint-disable no-any
-import { JsonValue, logging, terminal } from '@angular-devkit/core';
+import { logging, strings, tags, terminal } from '@angular-devkit/core';
+import * as path from 'path';
+import { getWorkspace } from '../utilities/config';
+import {
+  Arguments,
+  CommandContext,
+  CommandDescription,
+  CommandDescriptionMap,
+  CommandScope,
+  CommandWorkspace,
+  Option, SubCommandDescription,
+} from './interface';
 
-export interface CommandConstructor {
-  new(context: CommandContext, logger: logging.Logger): Command;
-  readonly name: string;
-  aliases: string[];
-  scope: CommandScope;
+export interface BaseCommandOptions {
+  help?: boolean | string;
 }
 
-export enum CommandScope {
-  everywhere,
-  inProject,
-  outsideProject,
-}
-
-export enum ArgumentStrategy {
-  MapToOptions,
-  Nothing,
-}
-
-export abstract class Command<T = any> {
-  protected _rawArgs: string[];
+export abstract class Command<T extends BaseCommandOptions = BaseCommandOptions> {
   public allowMissingWorkspace = false;
+  public workspace: CommandWorkspace;
 
-  constructor(context: CommandContext, logger: logging.Logger) {
-    this.logger = logger;
-    if (context) {
-      this.project = context.project;
-    }
+  protected static commandMap: CommandDescriptionMap;
+  static setCommandMap(map: CommandDescriptionMap) {
+    this.commandMap = map;
   }
 
-  public addOptions(options: Option[]) {
-    this.options = (this.options || []).concat(options);
+  constructor(
+    context: CommandContext,
+    public readonly description: CommandDescription,
+    protected readonly logger: logging.Logger,
+  ) {
+    this.workspace = context.workspace;
   }
 
-  async initializeRaw(args: string[]): Promise<any> {
-    this._rawArgs = args;
-
-    return args;
-  }
-  async initialize(_options: any): Promise<void> {
+  async initialize(options: T & Arguments): Promise<void> {
     return;
   }
 
-  validate(_options: T): boolean | Promise<boolean> {
-    return true;
+  async printHelp(options: T & Arguments): Promise<number> {
+    await this.printHelpUsage();
+    await this.printHelpOptions();
+
+    return 0;
   }
 
-  printHelp(commandName: string, description: string, options: any): void {
-    if (description) {
-      this.logger.info(description);
-    }
-    this.printHelpUsage(commandName, this.options);
-    this.printHelpOptions(this.options);
+  async printJsonHelp(_options: T & Arguments): Promise<number> {
+    this.logger.info(JSON.stringify(this.description));
+
+    return 0;
   }
 
-  private _getArguments(options: Option[]) {
-    function _getArgIndex(def: OptionSmartDefault | undefined): number {
-      if (def === undefined || def.$source !== 'argv' || typeof def.index !== 'number') {
-        // If there's no proper order, this argument is wonky. We will show it at the end only
-        // (after all other arguments).
-        return Infinity;
-      }
+  protected async printHelpUsage() {
+    this.logger.info(this.description.description);
 
-      return def.index;
-    }
+    const name = this.description.name;
+    const args = this.description.options.filter(x => x.positional !== undefined);
+    const opts = this.description.options.filter(x => x.positional === undefined);
 
-    return options
-      .filter(opt => this.isArgument(opt))
-      .sort((a, b) => _getArgIndex(a.$default) - _getArgIndex(b.$default));
-  }
-
-  protected printHelpUsage(name: string, options: Option[]) {
-    const args = this._getArguments(options);
-    const opts = options.filter(opt => !this.isArgument(opt));
     const argDisplay = args && args.length > 0
       ? ' ' + args.map(a => `<${a.name}>`).join(' ')
       : '';
     const optionsDisplay = opts && opts.length > 0
       ? ` [options]`
       : ``;
+
     this.logger.info(`usage: ng ${name}${argDisplay}${optionsDisplay}`);
+    this.logger.info('');
   }
 
-  protected isArgument(option: Option) {
-    let isArg = false;
-    if (option.$default !== undefined && option.$default.$source === 'argv') {
-      isArg = true;
-    }
+  protected async printHelpSubcommand(subcommand: SubCommandDescription) {
+    this.logger.info(subcommand.description);
 
-    return isArg;
+    await this.printHelpOptions(subcommand.options);
   }
 
-  protected printHelpOptions(options: Option[]) {
-    if (!options) {
-      return;
-    }
-    const args = options.filter(opt => this.isArgument(opt));
-    const opts = options.filter(opt => !this.isArgument(opt));
+  protected async printHelpOptions(options: Option[] = this.description.options) {
+    const args = options.filter(opt => opt.positional !== undefined);
+    const opts = options.filter(opt => opt.positional === undefined);
+
+    const formatDescription = (description: string) =>
+      `    ${description.replace(/\n/g, '\n    ')}`;
+
     if (args.length > 0) {
       this.logger.info(`arguments:`);
       args.forEach(o => {
         this.logger.info(`  ${terminal.cyan(o.name)}`);
-        this.logger.info(`    ${o.description}`);
+        if (o.description) {
+          this.logger.info(formatDescription(o.description));
+        }
       });
     }
-    if (this.options.length > 0) {
+    if (options.length > 0) {
+      if (args.length > 0) {
+        this.logger.info('');
+      }
       this.logger.info(`options:`);
       opts
         .filter(o => !o.hidden)
-        .sort((a, b) => a.name >= b.name ? 1 : -1)
+        .sort((a, b) => a.name.localeCompare(b.name))
         .forEach(o => {
           const aliases = o.aliases && o.aliases.length > 0
             ? '(' + o.aliases.map(a => `-${a}`).join(' ') + ')'
             : '';
-          this.logger.info(`  ${terminal.cyan('--' + o.name)} ${aliases}`);
-          this.logger.info(`    ${o.description}`);
+          this.logger.info(`  ${terminal.cyan('--' + strings.dasherize(o.name))} ${aliases}`);
+          if (o.description) {
+            this.logger.info(formatDescription(o.description));
+          }
         });
     }
   }
 
-  abstract run(options: T): number | void | Promise<number | void>;
-  public options: Option[];
-  public additionalSchemas: string[] = [];
-  protected readonly logger: logging.Logger;
-  protected readonly project: any;
-}
+  async validateScope(scope?: CommandScope): Promise<void> {
+    switch (scope === undefined ? this.description.scope : scope) {
+      case CommandScope.OutProject:
+        if (this.workspace.configFile) {
+          this.logger.fatal(tags.oneLine`
+            The ${this.description.name} command requires to be run outside of a project, but a
+            project definition was found at "${path.join(
+              this.workspace.root,
+              this.workspace.configFile,
+            )}".
+          `);
+          throw 1;
+        }
+        break;
+      case CommandScope.InProject:
+        if (!this.workspace.configFile || getWorkspace('local') === null) {
+          this.logger.fatal(tags.oneLine`
+            The ${this.description.name} command requires to be run in an Angular project, but a
+            project definition could not be found.
+          `);
+          throw 1;
+        }
+        break;
+      case CommandScope.Everywhere:
+        // Can't miss this.
+        break;
+    }
+  }
 
-export interface CommandContext {
-  project: any;
-}
+  abstract async run(options: T & Arguments): Promise<number | void>;
 
-export interface Option {
-  name: string;
-  description: string;
-  type: string;
-  default?: string | number | boolean;
-  required?: boolean;
-  aliases?: string[];
-  format?: string;
-  hidden?: boolean;
-  $default?: OptionSmartDefault;
-}
+  async validateAndRun(options: T & Arguments): Promise<number | void> {
+    if (!(options.help === true || options.help === 'json' || options.help === 'JSON')) {
+      await this.validateScope();
+    }
+    await this.initialize(options);
 
-export interface OptionSmartDefault {
-  $source: string;
-  [key: string]: JsonValue;
+    if (options.help === true) {
+      return this.printHelp(options);
+    } else if (options.help === 'json' || options.help === 'JSON') {
+      return this.printJsonHelp(options);
+    } else {
+      return await this.run(options);
+    }
+  }
 }

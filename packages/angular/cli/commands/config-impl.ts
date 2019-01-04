@@ -18,19 +18,15 @@ import {
 } from '@angular-devkit/core';
 import { writeFileSync } from 'fs';
 import { Command } from '../models/command';
+import { Arguments, CommandScope } from '../models/interface';
 import {
   getWorkspace,
   getWorkspaceRaw,
   migrateLegacyGlobalConfig,
   validateWorkspace,
 } from '../utilities/config';
+import { Schema as ConfigCommandSchema, Value as ConfigCommandSchemaValue } from './config';
 
-
-export interface ConfigOptions {
-  jsonPath: string;
-  value?: string;
-  global?: boolean;
-}
 
 const validCliPaths = new Map([
   ['cli.warnings.versionMismatch', 'boolean'],
@@ -139,20 +135,20 @@ function setValueFromPath<T extends JsonArray | JsonObject>(
   }
 }
 
-function normalizeValue(value: string, path: string): JsonValue {
+function normalizeValue(value: ConfigCommandSchemaValue, path: string): JsonValue {
   const cliOptionType = validCliPaths.get(path);
   if (cliOptionType) {
     switch (cliOptionType) {
       case 'boolean':
-        if (value.trim() === 'true') {
+        if (('' + value).trim() === 'true') {
           return true;
-        } else if (value.trim() === 'false') {
+        } else if (('' + value).trim() === 'false') {
           return false;
         }
         break;
       case 'number':
         const numberValue = Number(value);
-        if (!Number.isNaN(numberValue)) {
+        if (!Number.isFinite(numberValue)) {
           return numberValue;
         }
         break;
@@ -178,9 +174,13 @@ function normalizeValue(value: string, path: string): JsonValue {
   return value;
 }
 
-export class ConfigCommand extends Command {
-  public run(options: ConfigOptions) {
+export class ConfigCommand extends Command<ConfigCommandSchema> {
+  public async run(options: ConfigCommandSchema & Arguments) {
     const level = options.global ? 'global' : 'local';
+
+    if (!options.global) {
+      await this.validateScope(CommandScope.InProject);
+    }
 
     let config =
       (getWorkspace(level) as {} as { _workspace: experimental.workspace.WorkspaceSchema });
@@ -210,7 +210,7 @@ export class ConfigCommand extends Command {
     }
   }
 
-  private get(config: experimental.workspace.WorkspaceSchema, options: ConfigOptions) {
+  private get(config: experimental.workspace.WorkspaceSchema, options: ConfigCommandSchema) {
     let value;
     if (options.jsonPath) {
       value = getValueFromPath(config as {} as JsonObject, options.jsonPath);
@@ -227,9 +227,11 @@ export class ConfigCommand extends Command {
     } else {
       this.logger.info(value.toString());
     }
+
+    return 0;
   }
 
-  private set(options: ConfigOptions) {
+  private set(options: ConfigCommandSchema) {
     if (!options.jsonPath || !options.jsonPath.trim()) {
       throw new Error('Invalid Path.');
     }
@@ -268,6 +270,8 @@ export class ConfigCommand extends Command {
 
     const output = JSON.stringify(configValue, null, 2);
     writeFileSync(configPath, output);
+
+    return 0;
   }
 
 }

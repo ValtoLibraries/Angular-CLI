@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { latestVersions } from '../utility/latest-versions';
 import { Schema as WorkspaceOptions } from './schema';
 
@@ -14,7 +13,7 @@ import { Schema as WorkspaceOptions } from './schema';
 describe('Workspace Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: WorkspaceOptions = {
     name: 'foo',
@@ -26,13 +25,15 @@ describe('Workspace Schematic', () => {
 
     const tree = schematicRunner.runSchematic('workspace', options);
     const files = tree.files;
-    expect(files.indexOf('/.editorconfig')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/angular.json')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/.gitignore')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/package.json')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/README.md')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/tsconfig.json')).toBeGreaterThanOrEqual(0);
-    expect(files.indexOf('/tslint.json')).toBeGreaterThanOrEqual(0);
+    expect(files).toEqual(jasmine.arrayContaining([
+      '/.editorconfig',
+      '/angular.json',
+      '/.gitignore',
+      '/package.json',
+      '/README.md',
+      '/tsconfig.json',
+      '/tslint.json',
+    ]));
   });
 
   it('should set the name in package.json', () => {
@@ -54,5 +55,20 @@ describe('Workspace Schematic', () => {
     expect(pkg.dependencies['rxjs']).toEqual(latestVersions.RxJs);
     expect(pkg.dependencies['zone.js']).toEqual(latestVersions.ZoneJs);
     expect(pkg.devDependencies['typescript']).toEqual(latestVersions.TypeScript);
+  });
+
+  it('should create correct files when using minimal', () => {
+    const tree = schematicRunner.runSchematic('workspace', { ...defaultOptions, minimal: true });
+    const files = tree.files;
+    expect(files).toEqual(jasmine.arrayContaining([
+      '/angular.json',
+      '/.gitignore',
+      '/package.json',
+      '/README.md',
+      '/tsconfig.json',
+    ]));
+
+    expect(files).not.toContain('/tslint.json');
+    expect(files).not.toContain('/.editorconfig');
   });
 });

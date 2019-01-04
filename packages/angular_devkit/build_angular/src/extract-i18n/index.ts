@@ -27,8 +27,7 @@ import {
 } from '../angular-cli-files/models/webpack-configs';
 import { readTsconfig } from '../angular-cli-files/utilities/read-tsconfig';
 import { statsErrorsToString, statsWarningsToString } from '../angular-cli-files/utilities/stats';
-import { NormalizedBrowserBuilderSchema } from '../browser';
-import { BrowserBuilderSchema } from '../browser/schema';
+import { BrowserBuilderSchema, NormalizedBrowserBuilderSchema } from '../browser/schema';
 const webpackMerge = require('webpack-merge');
 
 
@@ -38,6 +37,7 @@ export interface ExtractI18nBuilderOptions {
   i18nLocale: string;
   outputPath?: string;
   outFile?: string;
+  progress?: boolean;
 }
 
 export class ExtractI18nBuilder implements Builder<ExtractI18nBuilderOptions> {
@@ -85,12 +85,17 @@ export class ExtractI18nBuilder implements Builder<ExtractI18nBuilderOptions> {
 
         // Extracting i18n uses the browser target webpack config with some specific options.
         const webpackConfig = this.buildWebpackConfig(root, projectRoot, {
-          ...browserOptions,
-          optimization: false,
+          // todo: remove this casting when 'CurrentFileReplacement' is changed to 'FileReplacement'
+          ...(browserOptions as NormalizedBrowserBuilderSchema),
+          optimization: {
+            scripts: false,
+            styles: false,
+          },
           i18nLocale: options.i18nLocale,
           i18nFormat: options.i18nFormat,
           i18nFile: outFile,
           aot: true,
+          progress: options.progress,
           assets: [],
           scripts: [],
           styles: [],
@@ -115,6 +120,7 @@ export class ExtractI18nBuilder implements Builder<ExtractI18nBuilderOptions> {
 
     wco = {
       root: getSystemPath(root),
+      logger: this.context.logger,
       projectRoot: getSystemPath(projectRoot),
       // TODO: use only this.options, it contains all flags and configs items already.
       buildOptions: options,

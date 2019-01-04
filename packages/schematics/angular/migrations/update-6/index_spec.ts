@@ -9,14 +9,13 @@
 import { JsonObject } from '@angular-devkit/core';
 import { EmptyTree } from '@angular-devkit/schematics';
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { latestVersions } from '../../utility/latest-versions';
 
 
 describe('Migration to v6', () => {
   const schematicRunner = new SchematicTestRunner(
     'migrations',
-    path.join(__dirname, '../migration-collection.json'),
+    require.resolve('../migration-collection.json'),
   );
 
   // tslint:disable-next-line:no-any
@@ -94,6 +93,11 @@ describe('Migration to v6', () => {
         karma: {
           config: './karma.conf.js',
         },
+        codeCoverage: {
+          exclude: [
+            './excluded.spec.ts',
+          ],
+        },
       },
       defaults: {
         styleExt: 'css',
@@ -123,6 +127,13 @@ describe('Migration to v6', () => {
   // tslint:disable-next-line:no-any
   function getConfig(tree: UnitTestTree): any {
     return JSON.parse(tree.readContent(configPath));
+  }
+
+  // tslint:disable-next-line:no-any
+  function getTarget(tree: UnitTestTree, targetName: string): any {
+    const project = getConfig(tree).projects.foo;
+
+    return project.architect[targetName];
   }
 
   describe('file creation/deletion', () => {
@@ -475,7 +486,7 @@ describe('Migration to v6', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
         const config = getConfig(tree);
-        expect(config.targets).not.toBeDefined();
+        expect(config.architect).not.toBeDefined();
       });
     });
 
@@ -527,7 +538,7 @@ describe('Migration to v6', () => {
       it('should set build target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const build = getConfig(tree).projects.foo.targets.build;
+        const build = getTarget(tree, 'build');
         expect(build.builder).toEqual('@angular-devkit/build-angular:browser');
         expect(build.options.scripts).toEqual([]);
         expect(build.options.styles).toEqual(['src/styles.css']);
@@ -561,7 +572,7 @@ describe('Migration to v6', () => {
       it('should not set baseHref on build & serve targets if not defined', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const build = getConfig(tree).projects.foo.targets.build;
+        const build = getTarget(tree, 'build');
         expect(build.options.baseHref).toBeUndefined();
       });
 
@@ -570,7 +581,7 @@ describe('Migration to v6', () => {
         config.apps[0].baseHref = '/base/href/';
         tree.create(oldConfigPath, JSON.stringify(config, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const build = getConfig(tree).projects.foo.targets.build;
+        const build = getTarget(tree, 'build');
         expect(build.options.baseHref).toEqual('/base/href/');
       });
 
@@ -578,19 +589,17 @@ describe('Migration to v6', () => {
         baseConfig.apps[0].serviceWorker = true;
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const config = getConfig(tree);
-        expect(config.projects.foo.targets.build.options.serviceWorker).toBeUndefined();
-        expect(
-          config.projects.foo.targets.build.configurations.production.serviceWorker,
-        ).toBe(true);
+        const build = getTarget(tree, 'build');
+        expect(build.options.serviceWorker).toBeUndefined();
+        expect(build.configurations.production.serviceWorker).toBe(true);
       });
 
       it('should add production configuration when no environments', () => {
         delete baseConfig.apps[0].environments;
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const config = getConfig(tree);
-        expect(config.projects.foo.targets.build.configurations).toEqual({
+        const build = getTarget(tree, 'build');
+        expect(build.configurations).toEqual({
           production: {
             optimization: true,
             outputHashing: 'all',
@@ -609,8 +618,8 @@ describe('Migration to v6', () => {
         tree.delete('/src/environments/environment.prod.ts');
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const config = getConfig(tree);
-        expect(config.projects.foo.targets.build.configurations).toEqual({
+        const build = getTarget(tree, 'build');
+        expect(build.configurations).toEqual({
           prod: {
             fileReplacements: [{
               replace: 'src/environments/environment.ts',
@@ -634,7 +643,7 @@ describe('Migration to v6', () => {
       it('should set the serve target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const serve = getConfig(tree).projects.foo.targets.serve;
+        const serve = getTarget(tree, 'serve');
         expect(serve.builder).toEqual('@angular-devkit/build-angular:dev-server');
         expect(serve.options).toEqual({
           browserTarget: 'foo:build',
@@ -647,12 +656,13 @@ describe('Migration to v6', () => {
       it('should set the test target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const test = getConfig(tree).projects.foo.targets['test'];
+        const test = getTarget(tree, 'test');
         expect(test.builder).toEqual('@angular-devkit/build-angular:karma');
         expect(test.options.main).toEqual('src/test.ts');
         expect(test.options.polyfills).toEqual('src/polyfills.ts');
         expect(test.options.tsConfig).toEqual('src/tsconfig.spec.json');
         expect(test.options.karmaConfig).toEqual('./karma.conf.js');
+        expect(test.options.codeCoverageExclude).toEqual(['./excluded.spec.ts']);
         expect(test.options.scripts).toEqual([]);
         expect(test.options.styles).toEqual(['src/styles.css']);
         expect(test.options.assets).toEqual([
@@ -666,7 +676,7 @@ describe('Migration to v6', () => {
       it('should set the extract i18n target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const extract = getConfig(tree).projects.foo.targets['extract-i18n'];
+        const extract = getTarget(tree, 'extract-i18n');
         expect(extract.builder).toEqual('@angular-devkit/build-angular:extract-i18n');
         expect(extract.options).toBeDefined();
         expect(extract.options.browserTarget).toEqual(`foo:build` );
@@ -675,7 +685,7 @@ describe('Migration to v6', () => {
       it('should set the lint target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const tslint = getConfig(tree).projects.foo.targets['lint'];
+        const tslint = getTarget(tree, 'lint');
         expect(tslint.builder).toEqual('@angular-devkit/build-angular:tslint');
         expect(tslint.options).toBeDefined();
         expect(tslint.options.tsConfig)
@@ -692,8 +702,8 @@ describe('Migration to v6', () => {
 
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const config = getConfig(tree);
-        const budgets = config.projects.foo.targets.build.configurations.production.budgets;
+        const build = getTarget(tree, 'build');
+        const budgets = build.configurations.production.budgets;
         expect(budgets.length).toEqual(1);
         expect(budgets[0].type).toEqual('bundle');
         expect(budgets[0].name).toEqual('main');
@@ -708,7 +718,7 @@ describe('Migration to v6', () => {
         const e2eProject = getConfig(tree).projects['foo-e2e'];
         expect(e2eProject.root).toBe('e2e');
         expect(e2eProject.sourceRoot).toBe('e2e');
-        const e2eOptions = e2eProject.targets.e2e;
+        const e2eOptions = e2eProject.architect.e2e;
         expect(e2eOptions.builder).toEqual('@angular-devkit/build-angular:protractor');
         const options = e2eOptions.options;
         expect(options.protractorConfig).toEqual('./protractor.conf.js');
@@ -722,7 +732,7 @@ describe('Migration to v6', () => {
         const e2eProject = getConfig(tree).projects['foo-e2e'];
         expect(e2eProject.root).toBe('apps/app1/e2e');
         expect(e2eProject.sourceRoot).toBe('apps/app1/e2e');
-        const e2eOptions = e2eProject.targets.e2e;
+        const e2eOptions = e2eProject.architect.e2e;
         expect(e2eOptions.builder).toEqual('@angular-devkit/build-angular:protractor');
         const options = e2eOptions.options;
         expect(options.protractorConfig).toEqual('./protractor.conf.js');
@@ -732,7 +742,7 @@ describe('Migration to v6', () => {
       it('should set the lint target', () => {
         tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
         tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
-        const tslint = getConfig(tree).projects['foo-e2e'].targets.lint;
+        const tslint = getConfig(tree).projects['foo-e2e'].architect.lint;
         expect(tslint.builder).toEqual('@angular-devkit/build-angular:tslint');
         expect(tslint.options).toBeDefined();
         expect(tslint.options.tsConfig).toEqual(['e2e/tsconfig.e2e.json']);
@@ -989,12 +999,12 @@ describe('Migration to v6', () => {
       tree.create(oldConfigPath, JSON.stringify(baseConfig, null, 2));
       tree = schematicRunner.runSchematic('migration-01', defaultOptions, tree);
       const config = getConfig(tree);
-      const target = config.projects.foo.targets.server;
+      const target = config.projects.foo.architect.server;
       expect(target).toBeDefined();
       expect(target.builder).toEqual('@angular-devkit/build-angular:server');
       expect(target.options.outputPath).toEqual('dist/server');
-      expect(target.options.main).toEqual('main.server.ts');
-      expect(target.options.tsConfig).toEqual('tsconfig.server.json');
+      expect(target.options.main).toEqual('src/main.server.ts');
+      expect(target.options.tsConfig).toEqual('src/tsconfig.server.json');
     });
   });
 });

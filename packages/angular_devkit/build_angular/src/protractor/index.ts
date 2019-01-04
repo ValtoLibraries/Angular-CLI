@@ -58,8 +58,11 @@ export class ProtractorBuilder implements Builder<ProtractorBuilderOptions> {
   private _startDevServer(options: ProtractorBuilderOptions) {
     const architect = this.context.architect;
     const [project, targetName, configuration] = (options.devServerTarget as string).split(':');
-    // Override browser build watch setting.
-    const overrides = { watch: false, host: options.host, port: options.port };
+    // Override dev server watch setting.
+    const overrides: Partial<DevServerBuilderOptions> = { watch: false };
+    // Also override the port and host if they are defined in protractor options.
+    if (options.host !== undefined) { overrides.host = options.host; }
+    if (options.port !== undefined) { overrides.port = options.port; }
     const targetSpec = { project, target: targetName, configuration, overrides };
     const builderConfig = architect.getBuilderConfiguration<DevServerBuilderOptions>(targetSpec);
     let devServerDescription: BuilderDescription;
@@ -128,10 +131,10 @@ export class ProtractorBuilder implements Builder<ProtractorBuilderOptions> {
   }
 
   private _runProtractor(root: Path, options: ProtractorBuilderOptions): Observable<BuildEvent> {
-    const additionalProtractorConfig = {
+    const additionalProtractorConfig: Partial<ProtractorBuilderOptions> = {
       elementExplorer: options.elementExplorer,
       baseUrl: options.baseUrl,
-      spec: options.specs.length ? options.specs : undefined,
+      specs: options.specs.length ? options.specs : undefined,
       suite: options.suite,
     };
 
@@ -139,7 +142,7 @@ export class ProtractorBuilder implements Builder<ProtractorBuilderOptions> {
     // process. To work around this we run it in a subprocess.
     // https://github.com/angular/protractor/issues/4160
     return runModuleAsObservableFork(
-      root,
+      getSystemPath(root),
       'protractor/built/launcher',
       'init',
       [

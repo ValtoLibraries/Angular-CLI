@@ -121,7 +121,7 @@ function migrateConfiguration(oldConfig: CliConfig, logger: logging.LoggerApi): 
     }
     const targetsConfig = extractTargetsConfig(oldConfig);
     if (targetsConfig !== null) {
-      config.targets = targetsConfig;
+      config.architect = targetsConfig;
     }
 
     context.logger.info(`Removing old config file (${oldConfigPath})`);
@@ -308,7 +308,7 @@ function extractProjectsConfig(
           extractLicenses: true,
           vendorChunk: false,
           buildOptimizer: true,
-          ...(serviceWorker ? {serviceWorker: true, ngswConfigPath: '/src/ngsw-config.json'} : {}),
+          ...(serviceWorker ? {serviceWorker: true, ngswConfigPath: 'src/ngsw-config.json'} : {}),
           ...(app.budgets ? { budgets: app.budgets as JsonArray} : {}),
         };
 
@@ -402,7 +402,7 @@ function extractProjectsConfig(
       };
 
       const targets: JsonObject = {};
-      project.targets = targets;
+      project.architect = targets;
 
         // Browser target
       const buildOptions: JsonObject = {
@@ -472,7 +472,16 @@ function extractProjectsConfig(
 
       if (app.testTsconfig) {
           testOptions.tsConfig = appRoot + '/' + app.testTsconfig;
-        }
+      }
+
+      const codeCoverageExclude = config.test
+        && config.test.codeCoverage
+        && config.test.codeCoverage.exclude;
+
+      if (codeCoverageExclude) {
+        testOptions.codeCoverageExclude = codeCoverageExclude;
+      }
+
       testOptions.scripts = (app.scripts || []).map(_extraEntryMapper);
       testOptions.styles = (app.styles || []).map(_extraEntryMapper);
       testOptions.assets = (app.assets || []).map(_mapAssets).filter(x => !!x);
@@ -517,7 +526,7 @@ function extractProjectsConfig(
         }
 
         return newItems;
-      }, <string[]> []);
+      }, [] as string[]);
 
         // Tslint target
       const lintOptions: JsonObject = {
@@ -536,8 +545,8 @@ function extractProjectsConfig(
       if (serverApp) {
         const serverOptions: JsonObject = {
           outputPath: serverApp.outDir || defaults.serverOutDir,
-          main: serverApp.main || defaults.serverMain,
-          tsConfig: serverApp.tsconfig || defaults.serverTsConfig,
+          main: `${appRoot}/${serverApp.main || defaults.serverMain}`,
+          tsConfig: `${appRoot}/${serverApp.tsconfig || defaults.serverTsConfig}`,
         };
         const serverTarget: JsonObject = {
           builder: '@angular-devkit/build-angular:server',
@@ -577,7 +586,7 @@ function extractProjectsConfig(
       };
       e2eTargets.lint = e2eLintTarget;
       if (protractorConfig) {
-        e2eProject.targets = e2eTargets;
+        e2eProject.architect = e2eTargets;
       }
 
       return { name, project, e2eProject };

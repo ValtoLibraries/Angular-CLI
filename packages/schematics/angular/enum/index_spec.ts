@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { SchematicTestRunner, UnitTestTree } from '@angular-devkit/schematics/testing';
-import * as path from 'path';
 import { Schema as ApplicationOptions } from '../application/schema';
 import { Schema as WorkspaceOptions } from '../workspace/schema';
 import { Schema as EnumOptions } from './schema';
@@ -15,7 +14,7 @@ import { Schema as EnumOptions } from './schema';
 describe('Enum Schematic', () => {
   const schematicRunner = new SchematicTestRunner(
     '@schematics/angular',
-    path.join(__dirname, '../collection.json'),
+    require.resolve('../collection.json'),
   );
   const defaultOptions: EnumOptions = {
     name: 'foo',
@@ -46,7 +45,7 @@ describe('Enum Schematic', () => {
   it('should create an enumeration', () => {
     const tree = schematicRunner.runSchematic('enum', defaultOptions, appTree);
     const files = tree.files;
-    expect(files.indexOf('/projects/bar/src/app/foo.enum.ts')).toBeGreaterThanOrEqual(0);
+    expect(files).toContain('/projects/bar/src/app/foo.enum.ts');
   });
   it('should create an enumeration', () => {
     const tree = schematicRunner.runSchematic('enum', defaultOptions, appTree);
@@ -59,6 +58,6 @@ describe('Enum Schematic', () => {
     config.projects.bar.sourceRoot = 'projects/bar/custom';
     appTree.overwrite('/angular.json', JSON.stringify(config, null, 2));
     appTree = schematicRunner.runSchematic('enum', defaultOptions, appTree);
-    expect(appTree.files.indexOf('/projects/bar/custom/app/foo.enum.ts')).toBeGreaterThanOrEqual(0);
+    expect(appTree.files).toContain('/projects/bar/custom/app/foo.enum.ts');
   });
 });

@@ -6,13 +6,14 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { logging, schema, virtualFs } from '@angular-devkit/core';
-import { Observable, Subject, concat, of, throwError } from 'rxjs';
+import { Observable, Subject, concat, from, of, throwError } from 'rxjs';
 import { concatMap, defaultIfEmpty, ignoreElements, last, map, tap } from 'rxjs/operators';
 import { EngineHost, SchematicEngine } from '../engine';
 import { UnsuccessfulWorkflowExecution } from '../exception/exception';
 import { standardFormats } from '../formats';
 import { DryRunEvent, DryRunSink } from '../sink/dryrun';
 import { HostSink } from '../sink/host';
+import { Sink } from '../sink/sink';
 import { HostTree } from '../tree/host-tree';
 import { Tree } from '../tree/interface';
 import { optimize } from '../tree/static';
@@ -62,7 +63,14 @@ export abstract class BaseWorkflow implements Workflow {
   constructor(options: BaseWorkflowOptions) {
     this._host = options.host;
     this._engineHost = options.engineHost;
-    this._registry = options.registry || new schema.CoreSchemaRegistry(standardFormats);
+
+    if (options.registry) {
+      this._registry = options.registry;
+    } else {
+      this._registry = new schema.CoreSchemaRegistry(standardFormats);
+      this._registry.addPostTransform(schema.transforms.addUndefinedDefaults);
+    }
+
     this._engine = new SchematicEngine(this._engineHost, this);
 
     this._context = [];
@@ -89,6 +97,35 @@ export abstract class BaseWorkflow implements Workflow {
     return this._lifeCycle.asObservable();
   }
 
+  protected _createSinks(): Sink[] {
+    let error = false;
+
+    const dryRunSink = new DryRunSink(this._host, this._force);
+    const dryRunSubscriber = dryRunSink.reporter.subscribe(event => {
+      this._reporter.next(event);
+      error = error || (event.kind == 'error');
+    });
+
+    // We need two sinks if we want to output what will happen, and actually do the work.
+    return [
+      dryRunSink,
+      // Add a custom sink that clean ourselves and throws an error if an error happened.
+      {
+        commit() {
+          dryRunSubscriber.unsubscribe();
+          if (error) {
+            return throwError(new UnsuccessfulWorkflowExecution());
+          }
+
+          return of();
+        },
+      },
+
+      // Only add a HostSink if this is not a dryRun.
+      ...(!this._dryRun ? [new HostSink(this._host, this._force)] : []),
+    ];
+  }
+
   execute(
     options: Partial<WorkflowExecutionContext> & RequiredWorkflowExecutionContext,
   ): Observable<void> {
@@ -105,17 +142,7 @@ export abstract class BaseWorkflow implements Workflow {
       || (parentContext && parentContext.collection === options.collection);
     const schematic = collection.createSchematic(options.schematic, allowPrivate);
 
-    // We need two sinks if we want to output what will happen, and actually do the work.
-    // Note that fsSink is technically not used if `--dry-run` is passed, but creating the Sink
-    // does not have any side effect.
-    const dryRunSink = new DryRunSink(this._host, this._force);
-    const fsSink = new HostSink(this._host, this._force);
-
-    let error = false;
-    const dryRunSubscriber = dryRunSink.reporter.subscribe(event => {
-      this._reporter.next(event);
-      error = error || (event.kind == 'error');
-    });
+    const sinks = this._createSinks();
 
     this._lifeCycle.next({ kind: 'workflow-start' });
 
@@ -134,22 +161,14 @@ export abstract class BaseWorkflow implements Workflow {
     ).pipe(
       map(tree => optimize(tree)),
       concatMap((tree: Tree) => {
+        // Process all sinks.
         return concat(
-          dryRunSink.commit(tree).pipe(ignoreElements()),
+          from(sinks).pipe(
+            concatMap(sink => sink.commit(tree)),
+            ignoreElements(),
+          ),
           of(tree),
         );
-      }),
-      concatMap((tree: Tree) => {
-        dryRunSubscriber.unsubscribe();
-        if (error) {
-          return throwError(new UnsuccessfulWorkflowExecution());
-        }
-
-        if (this._dryRun) {
-          return of();
-        }
-
-        return fsSink.commit(tree).pipe(defaultIfEmpty(), last());
       }),
       concatMap(() => {
         if (this._dryRun) {

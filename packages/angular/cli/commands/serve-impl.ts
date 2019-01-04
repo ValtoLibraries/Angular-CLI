@@ -7,21 +7,22 @@
  */
 
 import { ArchitectCommand, ArchitectCommandOptions } from '../models/architect-command';
+import { Arguments } from '../models/interface';
 import { Version } from '../upgrade/version';
+import { Schema as ServeCommandSchema } from './serve';
 
-
-export class ServeCommand extends ArchitectCommand {
+export class ServeCommand extends ArchitectCommand<ServeCommandSchema> {
   public readonly target = 'serve';
 
-  public validate(_options: ArchitectCommandOptions) {
+  public validate(_options: ArchitectCommandOptions & Arguments) {
     // Check Angular and TypeScript versions.
-    Version.assertCompatibleAngularVersion(this.project.root);
-    Version.assertTypescriptVersion(this.project.root);
+    Version.assertCompatibleAngularVersion(this.workspace.root);
+    Version.assertTypescriptVersion(this.workspace.root);
 
     return true;
   }
 
-  public async run(options: ArchitectCommandOptions) {
+  public async run(options: ArchitectCommandOptions & Arguments) {
     return this.runArchitectTarget(options);
   }
 }

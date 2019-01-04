@@ -1,9 +1,13 @@
 <!-- Links in /docs/documentation should NOT have `.md` at the end, because they end up in our wiki at release. -->
+**Documentation below is for CLI version 6. For version 7 see [here](https://angular.io/cli/generate)**.
 
 # ng generate directive
 
 ## Overview
 `ng generate directive [name]` generates a directive
+
+## Alias
+d - `ng generate d [name]`
 
 ## Options
 <details>

@@ -12,16 +12,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Command } from '../models/command';
 import { findUp } from '../utilities/find-up';
+import { Schema as VersionCommandSchema } from './version';
 
-
-export class VersionCommand extends Command {
+export class VersionCommand extends Command<VersionCommandSchema> {
   public static aliases = ['v'];
 
-  public run() {
+  async run() {
     const pkg = require(path.resolve(__dirname, '..', 'package.json'));
     let projPkg;
     try {
-      projPkg = require(path.resolve(this.project.root, 'package.json'));
+      projPkg = require(path.resolve(this.workspace.root, 'package.json'));
     } catch (exception) {
       projPkg = undefined;
     }
@@ -39,7 +39,7 @@ export class VersionCommand extends Command {
 
     const maybeNodeModules = findUp('node_modules', __dirname);
     const packageRoot = projPkg
-      ? path.resolve(this.project.root, 'node_modules')
+      ? path.resolve(this.workspace.root, 'node_modules')
       : maybeNodeModules;
 
     const packageNames = [

@@ -341,6 +341,13 @@ describe('scrub-file', () => {
             NotInput(),
             __metadata("design:type", Object)
           ], Clazz.prototype, "other", void 0);
+          Clazz.prototype.myMethod = function () { return 'bar'; };
+          __decorate([
+            myDecorator(),
+            __metadata("design:type", Function),
+            __metadata("design:paramtypes", []),
+            __metadata("design:returntype", void 0)
+          ], MyClass.prototype, "myMethod", null);
           return Clazz;
         }());
       `;
@@ -357,6 +364,13 @@ describe('scrub-file', () => {
             NotInput(),
             __metadata("design:type", Object)
           ], Clazz.prototype, "other", void 0);
+          Clazz.prototype.myMethod = function () { return 'bar'; };
+          __decorate([
+            myDecorator(),
+            __metadata("design:type", Function),
+            __metadata("design:paramtypes", []),
+            __metadata("design:returntype", void 0)
+          ], MyClass.prototype, "myMethod", null);
           return Clazz;
         }());
       `;
@@ -400,6 +414,38 @@ describe('scrub-file', () => {
         var Clazz2 = (function () {
           function Clazz2() { }
           return Clazz2;
+        }());
+      `;
+
+      expect(testScrubFile(input)).toBeTruthy();
+      expect(tags.oneLine`${transform(input)}`).toEqual(tags.oneLine`${output}`);
+    });
+  });
+
+  describe('__param', () => {
+    it('removes all constructor parameters and their type metadata', () => {
+      const output = tags.stripIndent`
+        var MyClass = /** @class */ (function () {
+            function MyClass(myParam) {
+                this.myProp = 'foo';
+            }
+            MyClass = __decorate([
+                myDecorator()
+            ], MyClass);
+            return MyClass;
+        }());
+      `;
+      const input = tags.stripIndent`
+        var MyClass = /** @class */ (function () {
+            function MyClass(myParam) {
+                this.myProp = 'foo';
+            }
+            MyClass = __decorate([
+                myDecorator(),
+                __param(0, myDecorator()),
+                __metadata("design:paramtypes", [Number])
+            ], MyClass);
+            return MyClass;
         }());
       `;
 

@@ -17,8 +17,7 @@ function isBlockLike(node: ts.Node): node is ts.BlockLike {
 
 export function getWrapEnumsTransformer(): ts.TransformerFactory<ts.SourceFile> {
   return (context: ts.TransformationContext): ts.Transformer<ts.SourceFile> => {
-    const transformer: ts.Transformer<ts.SourceFile> = (sf: ts.SourceFile) => {
-
+    const transformer: ts.Transformer<ts.SourceFile> = sf => {
       const result = visitBlockStatements(sf.statements, context);
 
       return ts.updateSourceFileNode(sf, ts.setTextRange(result, sf.statements));
@@ -45,15 +44,13 @@ function visitBlockStatements(
       result = ts.setTextRange(result, node.statements);
       switch (node.kind) {
         case ts.SyntaxKind.Block:
-          return ts.updateBlock(node as ts.Block, result);
+          return ts.updateBlock(node, result);
         case ts.SyntaxKind.ModuleBlock:
-          return ts.updateModuleBlock(node as ts.ModuleBlock, result);
+          return ts.updateModuleBlock(node, result);
         case ts.SyntaxKind.CaseClause:
-          const clause = node as ts.CaseClause;
-
-          return ts.updateCaseClause(clause, clause.expression, result);
+          return ts.updateCaseClause(node, node.expression, result);
         case ts.SyntaxKind.DefaultClause:
-          return ts.updateDefaultClause(node as ts.DefaultClause, result);
+          return ts.updateDefaultClause(node, result);
         default:
           return node;
       }
@@ -221,9 +218,13 @@ function findTs2_3EnumIife(
   }
 
   const parameter = expression.parameters[0];
-  if (!ts.isIdentifier(parameter.name) || parameter.name.text !== name) {
+  if (!ts.isIdentifier(parameter.name)) {
     return null;
   }
+
+  // The name of the parameter can be different than the name of the enum if it was renamed
+  // due to scope hoisting.
+  const parameterName = parameter.name.text;
 
   // In TS 2.3 enums, the IIFE contains only expressions with a certain format.
   // If we find any that is different, we ignore the whole thing.
@@ -245,7 +246,7 @@ function findTs2_3EnumIife(
       return null;
     }
 
-    if (!ts.isIdentifier(assignment.expression) || assignment.expression.text !== name) {
+    if (!ts.isIdentifier(assignment.expression) || assignment.expression.text !== parameterName) {
       return null;
     }
 
@@ -261,7 +262,7 @@ function findTs2_3EnumIife(
     }
 
     if (!ts.isIdentifier(memberArgument.left.expression)
-        || memberArgument.left.expression.text !== name) {
+      || memberArgument.left.expression.text !== parameterName) {
       return null;
     }
 

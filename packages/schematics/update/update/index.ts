@@ -20,7 +20,7 @@ import * as semver from 'semver';
 import { getNpmPackageJson } from './npm';
 import { NpmRepositoryPackageJson } from './npm-package-json';
 import { Dependency, JsonSchemaForNpmPackageJsonFiles } from './package-json';
-import { UpdateSchema } from './schema';
+import { Schema as UpdateSchema } from './schema';
 
 type VersionRange = string & { __VERSION_RANGE: void; };
 type PeerVersionTransform = string | ((range: string) => string);
@@ -76,7 +76,8 @@ interface PackageInfo {
 }
 
 interface UpdateMetadata {
-  packageGroup: string[];
+  packageGroupName?: string;
+  packageGroup: { [ packageName: string ]: string };
   requirements: { [packageName: string]: string };
   migrations?: string;
 }
@@ -88,9 +89,9 @@ function _updatePeerVersion(infoMap: Map<string, PackageInfo>, name: string, ran
     return range;
   }
   if (maybePackageInfo.target) {
-    name = maybePackageInfo.target.updateMetadata.packageGroup[0] || name;
+    name = maybePackageInfo.target.updateMetadata.packageGroupName || name;
   } else {
-    name = maybePackageInfo.installed.updateMetadata.packageGroup[0] || name;
+    name = maybePackageInfo.installed.updateMetadata.packageGroupName || name;
   }
 
   const maybeTransform = peerCompatibleWhitelist[name];
@@ -243,7 +244,7 @@ function _performUpdate(
 
   const toInstall = [...infoMap.values()]
       .map(x => [x.name, x.target, x.installed])
-      // tslint:disable-next-line:non-null-operator
+      // tslint:disable-next-line:no-non-null-assertion
       .filter(([name, target, installed]) => {
         return !!name && !!target && !!installed;
       }) as [string, PackageVersionInfo, PackageVersionInfo][];
@@ -353,7 +354,7 @@ function _getUpdateMetadata(
   const metadata = packageJson['ng-update'];
 
   const result: UpdateMetadata = {
-    packageGroup: [],
+    packageGroup: {},
     requirements: {},
   };
 
@@ -363,15 +364,28 @@ function _getUpdateMetadata(
 
   if (metadata['packageGroup']) {
     const packageGroup = metadata['packageGroup'];
-    // Verify that packageGroup is an array of strings. This is not an error but we still warn
-    // the user and ignore the packageGroup keys.
-    if (!Array.isArray(packageGroup) || packageGroup.some(x => typeof x != 'string')) {
+    // Verify that packageGroup is an array of strings or an map of versions. This is not an error
+    // but we still warn the user and ignore the packageGroup keys.
+    if (Array.isArray(packageGroup) && packageGroup.every(x => typeof x == 'string')) {
+      result.packageGroup = packageGroup.reduce((group, name) => {
+        group[name] = packageJson.version;
+
+        return group;
+      }, result.packageGroup);
+    } else if (typeof packageGroup == 'object' && packageGroup
+               && Object.values(packageGroup).every(x => typeof x == 'string')) {
+      result.packageGroup = packageGroup;
+    } else {
       logger.warn(
         `packageGroup metadata of package ${packageJson.name} is malformed. Ignoring.`,
       );
-    } else {
-      result.packageGroup = packageGroup;
     }
+
+    result.packageGroupName = Object.keys(result.packageGroup)[0];
+  }
+
+  if (typeof metadata['packageGroupName'] == 'string') {
+    result.packageGroupName = metadata['packageGroupName'];
   }
 
   if (metadata['requirements']) {
@@ -488,7 +502,7 @@ function _usageMessage(
 
   logger.info('\n');
   logger.info('There might be additional packages that are outdated.');
-  logger.info('Or run ng update --all to try to update all at the same time.\n');
+  logger.info('Run "ng update --all" to try to update all at the same time.\n');
 
   return of<void>(undefined);
 }
@@ -654,22 +668,34 @@ function _addPackageGroup(
     return;
   }
 
-  const packageGroup = ngUpdateMetadata['packageGroup'];
+  let packageGroup = ngUpdateMetadata['packageGroup'];
   if (!packageGroup) {
     return;
   }
-  if (!Array.isArray(packageGroup) || packageGroup.some(x => typeof x != 'string')) {
+  if (Array.isArray(packageGroup) && !packageGroup.some(x => typeof x != 'string')) {
+    packageGroup = packageGroup.reduce((acc, curr) => {
+      acc[curr] = maybePackage;
+
+      return acc;
+    }, {} as { [name: string]: string });
+  }
+
+  // Only need to check if it's an object because we set it right the time before.
+  if (typeof packageGroup != 'object'
+      || packageGroup === null
+      || Object.values(packageGroup).some(v => typeof v != 'string')
+  ) {
     logger.warn(`packageGroup metadata of package ${npmPackageJson.name} is malformed.`);
 
     return;
   }
 
-  packageGroup
+  Object.keys(packageGroup)
     .filter(name => !packages.has(name))  // Don't override names from the command line.
     .filter(name => allDependencies.has(name))  // Remove packages that aren't installed.
     .forEach(name => {
-    packages.set(name, maybePackage);
-  });
+      packages.set(name, packageGroup[name]);
+    });
 }
 
 /**
@@ -758,9 +784,11 @@ export default function(options: UpdateSchema): Rule {
     // We cannot just return this because we need to fetch the packages from NPM still for the
     // help/guide to show.
     options.packages = [];
-  } else if (typeof options.packages == 'string') {
-    // If a string, then we should split it and make it an array.
-    options.packages = options.packages.split(/,/g);
+  } else {
+    // We split every packages by commas to allow people to pass in multiple and make it an array.
+    options.packages = options.packages.reduce((acc, curr) => {
+      return acc.concat(curr.split(','));
+    }, [] as string[]);
   }
 
   if (options.migrateOnly && options.from) {
@@ -776,11 +804,16 @@ export default function(options: UpdateSchema): Rule {
     const logger = context.logger;
     const allDependencies = _getAllDependencies(tree);
     const packages = _buildPackageList(options, allDependencies, logger);
+    const usingYarn = options.packageManager === 'yarn';
 
     return observableFrom([...allDependencies.keys()]).pipe(
       // Grab all package.json from the npm repository. This requires a lot of HTTP calls so we
       // try to parallelize as many as possible.
-      mergeMap(depName => getNpmPackageJson(depName, options.registry, logger)),
+      mergeMap(depName => getNpmPackageJson(
+        depName,
+        logger,
+        { registryUrl: options.registry, usingYarn, verbose: options.verbose },
+      )),
 
       // Build a map of all dependencies and their packageJson.
       reduce<NpmRepositoryPackageJson, Map<string, NpmRepositoryPackageJson>>(
@@ -852,9 +885,9 @@ export default function(options: UpdateSchema): Rule {
             logger.createChild(''),
             'warn',
           );
-          _validateUpdatePackages(infoMap, options.force, sublog);
+          _validateUpdatePackages(infoMap, !!options.force, sublog);
 
-          return _performUpdate(tree, context, infoMap, logger, options.migrateOnly);
+          return _performUpdate(tree, context, infoMap, logger, !!options.migrateOnly);
         } else {
           return _usageMessage(options, infoMap, logger);
         }

@@ -9,13 +9,15 @@
 // TODO: cleanup this file, it's copied as is from Angular CLI.
 
 import * as path from 'path';
-import * as fs from 'fs';
 import * as glob from 'glob';
 import * as webpack from 'webpack';
 const webpackDevMiddleware = require('webpack-dev-middleware');
 
-import { AssetPattern } from '../../browser/schema';
 import { KarmaWebpackFailureCb } from './karma-webpack-failure-cb';
+import { statsErrorsToString } from '../utilities/stats';
+import { getWebpackStatsConfig } from '../models/webpack-configs/stats';
+import { createConsoleLogger } from '@angular-devkit/core/node';
+import { logging } from '@angular-devkit/core';
 
 /**
  * Enumerate needed (but not require/imported) dependencies from this file
@@ -62,7 +64,7 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
     )
   }
   const options = config.buildWebpack.options;
-  const projectRoot = config.buildWebpack.projectRoot as string;
+  const logger: logging.Logger = config.buildWebpack.logger || createConsoleLogger();
   successCb = config.buildWebpack.successCb;
   failureCb = config.buildWebpack.failureCb;
 
@@ -93,7 +95,9 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
   // Add webpack config.
   const webpackConfig = config.buildWebpack.webpackConfig;
   const webpackMiddlewareConfig = {
-    logLevel: 'error', // Hide webpack output because its noisy.
+    // Hide webpack output because its noisy.
+    logLevel: 'error',
+    stats: false,
     watchOptions: { poll: options.poll },
     publicPath: '/_karma_webpack_/',
   };
@@ -125,9 +129,6 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
   config.middleware = config.middleware || [];
   config.middleware.push('@angular-devkit/build-angular--fallback');
 
-  // Delete global styles entry, we don't want to load them.
-  delete webpackConfig.entry.styles;
-
   // The webpack tier owns the watch behavior so we want to force it in the config.
   webpackConfig.watch = !config.singleRun;
   if (config.singleRun) {
@@ -144,14 +145,15 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
   // Files need to be served from a custom path for Karma.
   webpackConfig.output.path = '/_karma_webpack_/';
   webpackConfig.output.publicPath = '/_karma_webpack_/';
+  webpackConfig.output.devtoolModuleFilenameTemplate = '[namespace]/[resource-path]?[loaders]';
 
   let compiler: any;
   try {
     compiler = webpack(webpackConfig);
   } catch (e) {
-    console.error(e.stack || e);
+    logger.error(e.stack || e)
     if (e.details) {
-      console.error(e.details);
+      logger.error(e.details)
     }
     throw e;
   }
@@ -176,9 +178,19 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
     blocked = [];
   }
 
+  let lastCompilationHash: string | undefined;
+  const statsConfig = getWebpackStatsConfig();
   compiler.hooks.done.tap('karma', (stats: any) => {
-    // Don't refresh karma when there are webpack errors.
-    if (stats.compilation.errors.length === 0) {
+    if (stats.compilation.errors.length > 0) {
+      const json = stats.toJson(config.stats);
+      // Print compilation errors.
+      logger.error(statsErrorsToString(json, statsConfig));
+      lastCompilationHash = undefined;
+      // Emit a failure build event if there are compilation errors.
+      failureCb && failureCb();
+    } else if (stats.hash != lastCompilationHash) {
+      // Refresh karma only when there are no webpack errors, and if the compilation changed.
+      lastCompilationHash = stats.hash;
       emitter.refreshFiles();
     }
     unblock();
@@ -197,6 +209,7 @@ const init: any = (config: any, emitter: any, customFileHandlers: any) => {
           '/_karma_webpack_/runtime.js',
           '/_karma_webpack_/polyfills.js',
           '/_karma_webpack_/scripts.js',
+          '/_karma_webpack_/styles.js',
           '/_karma_webpack_/vendor.js',
         ];
         if (alwaysServe.indexOf(req.url) != -1) {

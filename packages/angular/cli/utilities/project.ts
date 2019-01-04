@@ -11,18 +11,14 @@ import { normalize } from '@angular-devkit/core';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { CommandWorkspace } from '../models/interface';
 import { findUp } from './find-up';
 
-export function insideProject(): boolean {
-  return getProjectDetails() !== null;
+export function insideWorkspace(): boolean {
+  return getWorkspaceDetails() !== null;
 }
 
-export interface ProjectDetails {
-  root: string;
-  configFile?: string;
-}
-
-export function getProjectDetails(): ProjectDetails | null {
+export function getWorkspaceDetails(): CommandWorkspace | null {
   const currentDir = process.cwd();
   const possibleConfigFiles = [
     'angular.json',

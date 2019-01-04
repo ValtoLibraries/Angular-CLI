@@ -1,19 +1,39 @@
-version: 2
+# Configuration file for https://circleci.com/gh/angular/angular-cli
 
-_defaults: &defaults
+# Note: YAML anchors allow an object to be re-used, reducing duplication.
+# The ampersand declares an alias for an object, then later the `<<: *name`
+# syntax dereferences it.
+# See http://blog.daemonl.com/2016/02/yaml.html
+# To validate changes, use an online parser, eg.
+# http://yaml-online-parser.appspot.com/
+
+# Variables
+
+## IMPORTANT
+# If you change the `docker_image` version, also change the `cache_key` suffix and the version of
+# `com_github_bazelbuild_buildtools` in the `/WORKSPACE` file.
+var_1: &docker_image angular/ngcontainer:0.7.0
+var_2: &cache_key angular_devkit-{{ checksum "yarn.lock" }}-0.7.0
+var_3: &node_8_docker_image angular/ngcontainer:0.3.3
+
+# Settings common to each job
+anchor_1: &defaults
   working_directory: ~/ng
   docker:
-    - image: angular/ngcontainer:0.3.3
+    - image: *docker_image
 
-_post_checkout: &post_checkout
+# After checkout, rebase on top of master.
+# Similar to travis behavior, but not quite the same.
+# See https://discuss.circleci.com/t/1662
+anchor_2: &post_checkout
   post: git pull --ff-only origin "refs/pull/${CI_PULL_REQUEST//*pull\//}/merge"
-
-_root_package_lock_key: &root_package_lock_key
-  key: angular_devkit-{{ checksum "yarn.lock" }}-0.3.3-2
-
-_attach_options: &attach_options
+anchor_3: &root_package_lock_key
+  key: *cache_key
+anchor_4: &attach_options
   at: .
 
+# Job definitions
+version: 2
 jobs:
   install:
     <<: *defaults
@@ -29,7 +49,7 @@ jobs:
           <<: *root_package_lock_key
           paths:
             - ~/.cache/yarn
-  
+
   lint:
     <<: *defaults
     steps:
@@ -46,7 +66,7 @@ jobs:
     <<: *defaults
     steps:
       - attach_workspace: *attach_options
-      - run: npm run test -- --code-coverage --full
+      - run: npm run test -- --full
 
   test-large:
     <<: *defaults
@@ -55,7 +75,7 @@ jobs:
     steps:
       - attach_workspace: *attach_options
       - run: npm run webdriver-update-circleci
-      - run: npm run test-large -- --code-coverage --full --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
+      - run: npm run test-large -- --full --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
 
   e2e-cli:
     <<: *defaults
@@ -65,8 +85,34 @@ jobs:
     parallelism: 4
     steps:
       - attach_workspace: *attach_options
-      - run: npm install --global npm@6
       - run: xvfb-run -a node ./tests/legacy-cli/run_e2e --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
+      - store_artifacts:
+          path: /tmp/dist
+          destination: cli/new-production
+
+  e2e-node-8:
+    <<: *defaults
+    # Overwrite docker image to node 8.
+    docker:
+      - image: *node_8_docker_image
+    environment:
+      BASH_ENV: ~/.profile
+    resource_class: xlarge
+    parallelism: 2
+    steps:
+      - attach_workspace: *attach_options
+      - run: npm install --global npm@6
+      - run: xvfb-run -a node ./tests/legacy-cli/run_e2e --glob=tests/basic/* --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX}
+
+  e2e-cli-ng-snapshots:
+    <<: *defaults
+    environment:
+      BASH_ENV: ~/.profile
+    resource_class: xlarge
+    parallelism: 4
+    steps:
+      - attach_workspace: *attach_options
+      - run: xvfb-run -a node ./tests/legacy-cli/run_e2e --nb-shards=${CIRCLE_NODE_TOTAL} --shard=${CIRCLE_NODE_INDEX} --ng-snapshots
 
   build:
     <<: *defaults
@@ -76,11 +122,11 @@ jobs:
 
   build-bazel:
     <<: *defaults
-    resource_class: large
+    resource_class: xlarge
     steps:
       - attach_workspace: *attach_options
       - run: sudo cp .circleci/bazel.rc /etc/bazel.bazelrc
-      - run: bazel build //packages/...
+      - run: bazel test ...
 
   snapshot_publish:
     <<: *defaults
@@ -121,12 +167,14 @@ workflows:
             - install
       - build:
           requires:
-            - lint
-            - validate
+            - install
+          filters:
+            branches:
+              ignore:
+              - /docs-preview/
       - build-bazel:
           requires:
-            - lint
-            - validate
+            - build
       - test:
           requires:
             - build
@@ -136,6 +184,22 @@ workflows:
       - e2e-cli:
           requires:
             - build
+      - e2e-node-8:
+          requires:
+            - build
+      - snapshot_publish_docs:
+          requires:
+          - install
+          filters:
+            branches:
+              only:
+              - /docs-preview/
+      - e2e-cli-ng-snapshots:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
       - snapshot_publish:
           requires:
             - test
@@ -143,11 +207,13 @@ workflows:
             - e2e-cli
           filters:
             branches:
-              only: master
+              ignore:
+                - /pull\/.*/
       - publish:
           requires:
             - test
             - build
+            - e2e-cli
             - snapshot_publish
           filters:
             tags:

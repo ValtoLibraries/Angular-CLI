@@ -5,11 +5,8 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import { terminal } from '@angular-devkit/core';
-import * as ts from 'typescript';
-import { time, timeEnd } from './benchmark';
-import { WebpackCompilerHost } from './compiler_host';
-import { CancellationToken, gatherDiagnostics } from './gather_diagnostics';
+import { normalize, resolve, virtualFs } from '@angular-devkit/core';
+import { NodeJsSyncHost } from '@angular-devkit/core/node';
 import {
   CompilerHost,
   CompilerOptions,
@@ -17,38 +14,15 @@ import {
   createCompilerHost,
   createProgram,
   formatDiagnostics,
-} from './ngtools_api';
+} from '@angular/compiler-cli';
+import * as ts from 'typescript';
+import { time, timeEnd } from './benchmark';
+import { WebpackCompilerHost } from './compiler_host';
+import { CancellationToken, DiagnosticMode, gatherDiagnostics } from './gather_diagnostics';
+import { LogMessage, TypeCheckerMessage } from './type_checker_messages';
 
 
 // This file should run in a child process with the AUTO_START_ARG argument
-
-
-export enum MESSAGE_KIND {
-  Init,
-  Update,
-}
-
-export abstract class TypeCheckerMessage {
-  constructor(public kind: MESSAGE_KIND) { }
-}
-
-export class InitMessage extends TypeCheckerMessage {
-  constructor(
-    public compilerOptions: ts.CompilerOptions,
-    public basePath: string,
-    public jitMode: boolean,
-    public rootNames: string[],
-  ) {
-    super(MESSAGE_KIND.Init);
-  }
-}
-
-export class UpdateMessage extends TypeCheckerMessage {
-  constructor(public rootNames: string[], public changedCompilationFiles: string[]) {
-    super(MESSAGE_KIND.Update);
-  }
-}
-
 export const AUTO_START_ARG = '9d93e901-158a-4cf9-ba1b-2f0582ffcfeb';
 
 export class TypeChecker {
@@ -60,10 +34,27 @@ export class TypeChecker {
     _basePath: string,
     private _JitMode: boolean,
     private _rootNames: string[],
+    hostReplacementPaths: { [path: string]: string },
   ) {
     time('TypeChecker.constructor');
-    const compilerHost = new WebpackCompilerHost(_compilerOptions, _basePath);
-    compilerHost.enableCaching();
+    const host = new virtualFs.AliasHost(new NodeJsSyncHost());
+
+    // Add file replacements.
+    for (const from in hostReplacementPaths) {
+      const normalizedFrom = resolve(normalize(_basePath), normalize(from));
+      const normalizedWith = resolve(
+        normalize(_basePath),
+        normalize(hostReplacementPaths[from]),
+      );
+      host.aliases.set(normalizedFrom, normalizedWith);
+    }
+
+    const compilerHost = new WebpackCompilerHost(
+      _compilerOptions,
+      _basePath,
+      host,
+      true,
+    );
     // We don't set a async resource loader on the compiler host because we only support
     // html templates, which are the only ones that can throw errors, and those can be loaded
     // synchronously.
@@ -111,7 +102,7 @@ export class TypeChecker {
 
   private _diagnose(cancellationToken: CancellationToken) {
     const allDiagnostics = gatherDiagnostics(
-      this._program, this._JitMode, 'TypeChecker', cancellationToken);
+      this._program, this._JitMode, 'TypeChecker', DiagnosticMode.Semantic, cancellationToken);
 
     // Report diagnostics.
     if (!cancellationToken.isCancellationRequested()) {
@@ -120,7 +111,7 @@ export class TypeChecker {
 
       if (errors.length > 0) {
         const message = formatDiagnostics(errors);
-        console.error(terminal.bold(terminal.red('ERROR in ' + message)));
+        this.sendMessage(new LogMessage('error', 'ERROR in ' + message));
       } else {
         // Reset the changed file tracker only if there are no errors.
         this._compilerHost.resetChangedFileTracker();
@@ -128,8 +119,14 @@ export class TypeChecker {
 
       if (warnings.length > 0) {
         const message = formatDiagnostics(warnings);
-        console.error(terminal.bold(terminal.yellow('WARNING in ' + message)));
+        this.sendMessage(new LogMessage('warn', 'WARNING in ' + message));
       }
+    }
+  }
+
+  private sendMessage(msg: TypeCheckerMessage) {
+    if (process.send) {
+      process.send(msg);
     }
   }
 

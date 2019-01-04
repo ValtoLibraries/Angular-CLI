@@ -28,14 +28,14 @@ export default function () {
       expectation: 'warning',
       message: 'Budget warning: all, min warning',
       budget: { type: 'all', minimumWarning: '100mb' },
-    }
+    },
   ];
 
   const promiseFactories = budgetConfigs.map(cfg => {
     if (cfg.expectation === 'error') {
       return () => {
         return updateJsonFile('angular.json', (json) => {
-            json.projects['test-project'].targets.build.options.budgets = [cfg.budget];
+            json.projects['test-project'].architect.build.options.budgets = [cfg.budget];
           })
           .then(() => expectToFail(() => ng('build', '--optimization')))
           .then(errorMessage => {
@@ -47,11 +47,11 @@ export default function () {
     } else if (cfg.expectation === 'warning') {
       return () => {
         return updateJsonFile('angular.json', (json) => {
-            json.projects['test-project'].targets.build.options.budgets = [cfg.budget];
+            json.projects['test-project'].architect.build.options.budgets = [cfg.budget];
           })
           .then(() => ng('build', '--optimization'))
-          .then(({ stdout }) => {
-            if (!/WARNING in budgets/.test(stdout)) {
+          .then(({ stderr }) => {
+            if (!/WARNING in budgets/.test(stderr)) {
               throw new Error(cfg.message);
             }
           });
@@ -59,11 +59,11 @@ export default function () {
     } else { // pass
       return () => {
         return updateJsonFile('angular.json', (json) => {
-            json.projects['test-project'].targets.build.options.budgets = [cfg.budget];
+            json.projects['test-project'].architect.build.options.budgets = [cfg.budget];
           })
           .then(() => ng('build', '--optimization'))
-          .then(({ stdout }) => {
-            if (/(WARNING|ERROR)/.test(stdout)) {
+          .then(({ stderr }) => {
+            if (/(WARNING|ERROR)/.test(stderr)) {
               throw new Error(cfg.message);
             }
           });

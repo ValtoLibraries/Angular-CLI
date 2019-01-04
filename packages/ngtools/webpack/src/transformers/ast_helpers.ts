@@ -5,6 +5,7 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
+import { virtualFs } from '@angular-devkit/core';
 import * as ts from 'typescript';
 import { WebpackCompilerHost } from '../compiler_host';
 
@@ -44,12 +45,13 @@ export function getLastNode(sourceFile: ts.SourceFile): ts.Node | null {
 const basePath = '/project/src/';
 const fileName = basePath + 'test-file.ts';
 
-export function createTypescriptContext(content: string) {
+export function createTypescriptContext(content: string, additionalFiles?: Record<string, string>) {
   // Set compiler options.
   const compilerOptions: ts.CompilerOptions = {
     noEmitOnError: false,
     allowJs: true,
     newLine: ts.NewLineKind.LineFeed,
+    moduleResolution: ts.ModuleResolutionKind.NodeJs,
     target: ts.ScriptTarget.ESNext,
     skipLibCheck: true,
     sourceMap: false,
@@ -57,10 +59,21 @@ export function createTypescriptContext(content: string) {
   };
 
   // Create compiler host.
-  const compilerHost = new WebpackCompilerHost(compilerOptions, basePath);
+  const compilerHost = new WebpackCompilerHost(
+    compilerOptions,
+    basePath,
+    new virtualFs.SimpleMemoryHost(),
+    false,
+  );
 
   // Add a dummy file to host content.
   compilerHost.writeFile(fileName, content, false);
+
+  if (additionalFiles) {
+    for (const key in additionalFiles) {
+      compilerHost.writeFile(basePath + key, additionalFiles[key], false);
+    }
+  }
 
   // Create the TypeScript program.
   const program = ts.createProgram([fileName], compilerOptions, compilerHost);
@@ -97,5 +110,5 @@ export function transformTypescript(
   }
 
   // Return the transpiled js.
-  return compilerHost.readFile(fileName.replace(/\.ts$/, '.js'));
+  return compilerHost.readFile(fileName.replace(/\.tsx?$/, '.js'));
 }

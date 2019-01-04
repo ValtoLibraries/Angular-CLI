@@ -58,9 +58,8 @@ describe('build-optimizer', () => {
       `;
       // tslint:disable:max-line-length
       const output = tags.oneLine`
-        /** PURE_IMPORTS_START _angular_core,tslib PURE_IMPORTS_END */
-        ${imports}
         import { __extends } from "tslib";
+        ${imports}
         var ChangeDetectionStrategy = /*@__PURE__*/ (function (ChangeDetectionStrategy) {
           ChangeDetectionStrategy[ChangeDetectionStrategy["OnPush"] = 0] = "OnPush";
           ChangeDetectionStrategy[ChangeDetectionStrategy["Default"] = 1] = "Default";
@@ -93,7 +92,6 @@ describe('build-optimizer', () => {
 
     it('supports flagging module as side-effect free', () => {
       const output = tags.oneLine`
-        /** PURE_IMPORTS_START  PURE_IMPORTS_END */
         var RenderType_MdOption = /*@__PURE__*/ ɵcrt({ encapsulation: 2, styles: styles_MdOption });
       `;
       const input = tags.stripIndent`

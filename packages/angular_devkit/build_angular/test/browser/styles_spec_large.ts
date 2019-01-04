@@ -278,62 +278,6 @@ describe('Browser Builder styles', () => {
     });
   });
 
-  it('inlines resources', (done) => {
-    host.copyFile('src/spectrum.png', 'src/large.png');
-    host.writeMultipleFiles({
-      'src/styles.scss': `
-        h1 { background: url('./large.png'),
-                         linear-gradient(to bottom, #0e40fa 25%, #0654f4 75%); }
-        h2 { background: url('./small.svg'); }
-        p  { background: url(./small-id.svg#testID); }
-      `,
-      'src/app/app.component.css': `
-        h3 { background: url('../small.svg'); }
-        h4 { background: url("../large.png"); }
-      `,
-      'src/small.svg': imgSvg,
-      'src/small-id.svg': imgSvg,
-    });
-
-    const overrides = {
-      aot: true,
-      extractCss: true,
-      styles: [`src/styles.scss`],
-    };
-
-    runTargetSpec(host, browserTargetSpec, overrides).pipe(
-      tap((buildEvent) => expect(buildEvent.success).toBe(true)),
-      tap(() => {
-        const fileName = 'dist/styles.css';
-        const content = virtualFs.fileBufferToString(host.scopedSync().read(normalize(fileName)));
-        // Large image should not be inlined, and gradient should be there.
-        expect(content).toMatch(
-          /url\(['"]?large\.png['"]?\),\s+linear-gradient\(to bottom, #0e40fa 25%, #0654f4 75%\);/);
-        // Small image should be inlined.
-        expect(content).toMatch(/url\(\\?['"]data:image\/svg\+xml/);
-        // Small image with param should not be inlined.
-        expect(content).toMatch(/url\(['"]?small-id\.svg#testID['"]?\)/);
-      }),
-      tap(() => {
-        const fileName = 'dist/main.js';
-        const content = virtualFs.fileBufferToString(host.scopedSync().read(normalize(fileName)));
-        // Large image should not be inlined.
-        expect(content).toMatch(/url\((?:['"]|\\')?large\.png(?:['"]|\\')?\)/);
-        // Small image should be inlined.
-        expect(content).toMatch(/url\(\\?['"]data:image\/svg\+xml/);
-      }),
-      tap(() => {
-        expect(host.scopedSync().exists(normalize('dist/small.svg'))).toBe(false);
-        expect(host.scopedSync().exists(normalize('dist/large.png'))).toBe(true);
-        expect(host.scopedSync().exists(normalize('dist/small-id.svg'))).toBe(true);
-      }),
-      // TODO: find a way to check logger/output for warnings.
-      // if (stdout.match(/postcss-url: \.+: Can't read file '\.+', ignoring/)) {
-      //   throw new Error('Expected no postcss-url file read warnings.');
-      // }
-    ).toPromise().then(done, done.fail);
-  });
-
   it(`supports font-awesome imports`, (done) => {
     host.writeMultipleFiles({
       'src/styles.scss': `
@@ -343,6 +287,20 @@ describe('Browser Builder styles', () => {
     });
 
     const overrides = { extractCss: true, styles: [`src/styles.scss`] };
+
+    runTargetSpec(host, browserTargetSpec, overrides).pipe(
+      tap((buildEvent) => expect(buildEvent.success).toBe(true)),
+    ).toPromise().then(done, done.fail);
+  }, 30000);
+
+  it(`supports font-awesome imports without extractCss`, (done) => {
+    host.writeMultipleFiles({
+      'src/styles.scss': `
+        @import "~font-awesome/css/font-awesome.css";
+      `,
+    });
+
+    const overrides = { extractCss: false, styles: [`src/styles.scss`] };
 
     runTargetSpec(host, browserTargetSpec, overrides).pipe(
       tap((buildEvent) => expect(buildEvent.success).toBe(true)),
@@ -407,8 +365,6 @@ describe('Browser Builder styles', () => {
         h3 { background: url('/assets/component-img-absolute.svg'); }
         h4 { background: url('../assets/component-img-relative.png'); }
       `,
-      // Use a small SVG for the absolute image to help validate that it is being referenced,
-      // because it is so small it would be inlined usually.
       'src/assets/global-img-absolute.svg': imgSvg,
       'src/assets/component-img-absolute.svg': imgSvg,
     });
@@ -427,12 +383,12 @@ describe('Browser Builder styles', () => {
         expect(styles).toContain(`url('global-img-relative.png')`);
         expect(main).toContain(`url('/assets/component-img-absolute.svg')`);
         expect(main).toContain(`url('component-img-relative.png')`);
-        expect(host.scopedSync().exists(normalize('dist/global-img-absolute.svg')))
-          .toBe(false);
+        expect(host.scopedSync().exists(normalize('dist/assets/global-img-absolute.svg')))
+          .toBe(true);
         expect(host.scopedSync().exists(normalize('dist/global-img-relative.png')))
           .toBe(true);
-        expect(host.scopedSync().exists(normalize('dist/component-img-absolute.svg')))
-          .toBe(false);
+        expect(host.scopedSync().exists(normalize('dist/assets/component-img-absolute.svg')))
+          .toBe(true);
         expect(host.scopedSync().exists(normalize('dist/component-img-relative.png')))
           .toBe(true);
       }),
@@ -545,6 +501,27 @@ describe('Browser Builder styles', () => {
 
     runTargetSpec(host, browserTargetSpec, overrides).pipe(
       tap((buildEvent) => expect(buildEvent.success).toBe(true)),
+    ).toPromise().then(done, done.fail);
+  });
+
+  it('supports Protocol-relative Url', (done) => {
+    host.writeMultipleFiles({
+      'src/styles.css': `
+        body {
+          background-image: url('//cdn.com/classic-bg.jpg');
+        }
+      `,
+    });
+
+    const overrides = { extractCss: true, optimization: true };
+    runTargetSpec(host, browserTargetSpec, overrides).pipe(
+      tap((buildEvent) => {
+        expect(buildEvent.success).toBe(true);
+
+        const filePath = './dist/styles.css';
+        const content = virtualFs.fileBufferToString(host.scopedSync().read(normalize(filePath)));
+        expect(content).toContain('background-image:url(//cdn.com/classic-bg.jpg)');
+      }),
     ).toPromise().then(done, done.fail);
   });
 });

@@ -140,7 +140,7 @@ export function validateWorkspace(json: JsonObject) {
   return true;
 }
 
-function getProjectByCwd(workspace: experimental.workspace.Workspace): string | null {
+export function getProjectByCwd(workspace: experimental.workspace.Workspace): string | null {
   try {
     return workspace.getProjectByPath(normalize(process.cwd()));
   } catch (e) {
@@ -151,7 +151,7 @@ function getProjectByCwd(workspace: experimental.workspace.Workspace): string | 
   }
 }
 
-export function getPackageManager(): string {
+export function getConfiguredPackageManager(): string | null {
   let workspace = getWorkspace('local');
 
   if (workspace) {
@@ -186,7 +186,7 @@ export function getPackageManager(): string {
     }
   }
 
-  return 'npm';
+  return null;
 }
 
 export function migrateLegacyGlobalConfig(): boolean {
@@ -263,36 +263,6 @@ function getLegacyPackageManager(): string | null {
   }
 
   return null;
-}
-
-export function getDefaultSchematicCollection(): string {
-  let workspace = getWorkspace('local');
-
-  if (workspace) {
-    const project = getProjectByCwd(workspace);
-    if (project && workspace.getProjectCli(project)) {
-      const value = workspace.getProjectCli(project)['defaultCollection'];
-      if (typeof value == 'string') {
-        return value;
-      }
-    }
-    if (workspace.getCli()) {
-      const value = workspace.getCli()['defaultCollection'];
-      if (typeof value == 'string') {
-        return value;
-      }
-    }
-  }
-
-  workspace = getWorkspace('global');
-  if (workspace && workspace.getCli()) {
-    const value = workspace.getCli()['defaultCollection'];
-    if (typeof value == 'string') {
-      return value;
-    }
-  }
-
-  return '@schematics/angular';
 }
 
 export function getSchematicDefaults(

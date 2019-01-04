@@ -7,10 +7,10 @@
  */
 // tslint:disable:no-implicit-dependencies
 import { JsonObject, logging } from '@angular-devkit/core';
+import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as glob from 'glob';
 import * as path from 'path';
-import * as ts from 'typescript';
 import { packages } from '../lib/packages';
 
 const minimatch = require('minimatch');
@@ -34,19 +34,53 @@ function _mkdirp(p: string) {
   if (!fs.existsSync(path.dirname(p))) {
     _mkdirp(path.dirname(p));
   }
-  fs.mkdirSync(p);
+  if (!fs.existsSync(p)) {
+    fs.mkdirSync(p);
+  }
+}
+
+function _recursiveFileList(p: string): string[] {
+  if (!fs.statSync(p).isDirectory()) {
+    return [];
+  }
+
+  const list = fs.readdirSync(p);
+
+  return list
+    .map(subpath => {
+      const subpathList = _recursiveFileList(path.join(p, subpath));
+
+      return [ subpath, ...subpathList.map(sp => path.join(subpath, sp))];
+    })
+    // Flatten.
+    .reduce((acc, curr) => [...acc, ...curr], [])
+    // Filter out directories.
+    .filter(sp => !fs.statSync(path.join(p, sp)).isDirectory());
 }
 
 
+// This method mimics how npm pack tars packages.
 function _tar(out: string, dir: string) {
+  // NOTE: node-tar does some Magic Stuff depending on prefixes for files
+  //       specifically with @ signs, so we just neutralize that one
+  //       and any such future "features" by prepending `./`
+
+  // Without this, the .tar file cannot be opened on Windows.
+
+  const files = _recursiveFileList(dir).map((f) => `./${f}`);
+
   return tar.create({
     gzip: true,
     strict: true,
     portable: true,
     cwd: dir,
+    prefix: 'package/',
     file: out,
     sync: true,
-  }, ['.']);
+    // Provide a specific date in the 1980s for the benefit of zip,
+    // which is confounded by files dated at the Unix epoch 0.
+    mtime: new Date('1985-10-26T08:15:00.000Z'),
+  }, files);
 }
 
 
@@ -54,6 +88,11 @@ function _copy(from: string, to: string) {
   // Create parent folder if necessary.
   if (!fs.existsSync(path.dirname(to))) {
     _mkdirp(path.dirname(to));
+  }
+
+  // Error out if destination already exists.
+  if (fs.existsSync(to)) {
+    throw new Error(`Path ${to} already exist...`);
   }
 
   from = path.relative(process.cwd(), from);
@@ -128,41 +167,82 @@ function _sortPackages() {
   return sortedPackages;
 }
 
+function _exec(command: string, args: string[], opts: { cwd?: string }, logger: logging.Logger) {
+  const { status, error, stderr, stdout } = child_process.spawnSync(command, args, {
+    stdio: 'inherit',
+    ...opts,
+  });
 
-function _build(logger: logging.Logger) {
-  logger.info('Building...');
-  const tsConfigPath = path.relative(process.cwd(), path.join(__dirname, '../tsconfig.json'));
-  // Load the Compiler Options.
-  const tsConfig = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
-  const parsedTsConfig = ts.parseJsonConfigFileContent(tsConfig.config, ts.sys, '.');
-
-  // Create the program and emit.
-  const program = ts.createProgram(parsedTsConfig.fileNames, parsedTsConfig.options);
-  const result = program.emit();
-  if (result.emitSkipped) {
-    logger.error(`TypeScript compiler failed:`);
-    const diagLogger = logger.createChild('diagnostics');
-    result.diagnostics.forEach(diagnostic => {
-      const messageText = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-
-      if (diagnostic.file) {
-        const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start || 0);
-        const fileName = diagnostic.file.fileName;
-        const { line, character } = position;
-        diagLogger.error(`${fileName} (${line + 1},${character + 1}): ${messageText}`);
-      } else {
-        diagLogger.error(messageText);
-      }
-    });
-    process.exit(1);
+  if (status != 0) {
+    logger.error(`Command failed: ${command} ${args.map(x => JSON.stringify(x)).join(', ')}`);
+    if (error) {
+      logger.error('Error: ' + (error ? error.message : 'undefined'));
+    } else {
+      logger.error(`STDOUT:\n${stdout}`);
+      logger.error(`STDERR:\n${stderr}`);
+    }
+    throw error;
   }
 }
 
 
-export default function(argv: { local?: boolean, snapshot?: boolean }, logger: logging.Logger) {
+function _build(logger: logging.Logger) {
+  logger.info('Building...');
+  _exec('node', [
+    require.resolve('typescript/bin/tsc'),
+    '-p',
+    'tsconfig.json',
+  ], {}, logger);
+}
+
+
+async function _bazel(logger: logging.Logger) {
+  // TODO: undo this when we fully support bazel on windows.
+  // logger.info('Bazel build...');
+  // _exec('bazel', ['build', '//packages/...'], {}, logger);
+
+  const allJsonFiles = glob.sync('packages/**/*.json', {
+    ignore: [
+      '**/node_modules/**',
+      '**/files/**',
+      '**/*-files/**',
+      '**/package.json',
+    ],
+  });
+
+  const quicktypeRunner = require('../tools/quicktype_runner');
+  logger.info('Generating JSON Schema....');
+
+  for (const fileName of allJsonFiles) {
+    if (fs.existsSync(fileName.replace(/\.json$/, '.ts'))
+        || fs.existsSync(fileName.replace(/\.json$/, '.d.ts'))) {
+      // Skip files that already exist.
+      continue;
+    }
+    const content = fs.readFileSync(fileName, 'utf-8');
+
+    const json = JSON.parse(content);
+    if (!json.$schema) {
+      // Skip non-schema files.
+      continue;
+    }
+    const tsContent = await quicktypeRunner.generate(fileName);
+    const tsPath = path.join(__dirname, '../dist-schema', fileName.replace(/\.json$/, '.ts'));
+
+    _mkdirp(path.dirname(tsPath));
+    fs.writeFileSync(tsPath, tsContent, 'utf-8');
+  }
+}
+
+
+export default async function(
+  argv: { local?: boolean, snapshot?: boolean },
+  logger: logging.Logger,
+) {
   _clean(logger);
 
   const sortedPackages = _sortPackages();
+  await _bazel(logger);
   _build(logger);
 
   logger.info('Moving packages to dist/');
@@ -172,6 +252,19 @@ export default function(argv: { local?: boolean, snapshot?: boolean }, logger: l
     const pkg = packages[packageName];
     _recursiveCopy(pkg.build, pkg.dist, logger);
     _rimraf(pkg.build);
+  }
+
+  logger.info('Merging bazel-bin/ with dist/');
+  for (const packageName of sortedPackages) {
+    const pkg = packages[packageName];
+    const bazelBinPath = pkg.build.replace(/([\\\/]dist[\\\/])(packages)/, (_, dist, packages) => {
+      return path.join(dist, 'dist-schema', packages);
+    });
+    if (fs.existsSync(bazelBinPath)) {
+      packageLogger.info(packageName);
+      _recursiveCopy(bazelBinPath, pkg.dist, logger);
+      _rimraf(bazelBinPath);
+    }
   }
 
   logger.info('Copying resources...');
@@ -245,9 +338,14 @@ export default function(argv: { local?: boolean, snapshot?: boolean }, logger: l
   logger.info('Removing spec files...');
   const specLogger = logger.createChild('specfiles');
   for (const packageName of sortedPackages) {
-    specLogger.info(packageName);
     const pkg = packages[packageName];
     const files = glob.sync(path.join(pkg.dist, '**/*_spec?(_large).@(js|d.ts)'));
+
+    if (files.length == 0) {
+      continue;
+    }
+
+    specLogger.info(packageName);
     specLogger.info(`  ${files.length} spec files found...`);
     files.forEach(fileName => _rm(fileName));
   }
@@ -256,9 +354,14 @@ export default function(argv: { local?: boolean, snapshot?: boolean }, logger: l
   const templateLogger = logger.createChild('templates');
   const templateCompiler = require('@angular-devkit/core').template;
   for (const packageName of sortedPackages) {
-    templateLogger.info(packageName);
     const pkg = packages[packageName];
     const files = glob.sync(path.join(pkg.dist, '**/*.ejs'));
+
+    if (files.length == 0) {
+      continue;
+    }
+
+    templateLogger.info(packageName);
     templateLogger.info(`  ${files.length} ejs files found...`);
     files.forEach(fileName => {
       const p = path.relative(

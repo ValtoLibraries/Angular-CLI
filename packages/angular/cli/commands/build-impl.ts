@@ -7,20 +7,18 @@
  */
 
 import { ArchitectCommand, ArchitectCommandOptions } from '../models/architect-command';
+import { Arguments } from '../models/interface';
 import { Version } from '../upgrade/version';
+import { Schema as BuildCommandSchema } from './build';
 
-export class BuildCommand extends ArchitectCommand {
+export class BuildCommand extends ArchitectCommand<BuildCommandSchema> {
   public readonly target = 'build';
 
-  public validate(options: ArchitectCommandOptions) {
+  public async run(options: ArchitectCommandOptions & Arguments) {
     // Check Angular and TypeScript versions.
-    Version.assertCompatibleAngularVersion(this.project.root);
-    Version.assertTypescriptVersion(this.project.root);
+    Version.assertCompatibleAngularVersion(this.workspace.root);
+    Version.assertTypescriptVersion(this.workspace.root);
 
-    return super.validate(options);
-  }
-
-  public async run(options: ArchitectCommandOptions) {
     return this.runArchitectTarget(options);
   }
 }

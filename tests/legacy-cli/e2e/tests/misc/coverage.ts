@@ -10,16 +10,17 @@ export default function () {
   return;
 
   return ng('test', '--watch=false', '--code-coverage')
+    .then(output => expect(output.stdout).toContain('Coverage summary'))
     .then(() => expectFileToExist('coverage/src/app'))
     .then(() => expectFileToExist('coverage/lcov.info'))
     // Verify code coverage exclude work
     .then(() => expectFileToMatch('coverage/lcov.info', 'polyfills.ts'))
     .then(() => expectFileToMatch('coverage/lcov.info', 'test.ts'))
     .then(() => updateJsonFile('angular.json', workspaceJson => {
-      const appArchitect = workspaceJson.projects['test-project'].targets;
+      const appArchitect = workspaceJson.projects['test-project'].architect;
       appArchitect.test.options.codeCoverageExclude = [
         'src/polyfills.ts',
-        '**/test.ts'
+        '**/test.ts',
       ];
     }))
     .then(() => ng('test', '--watch=false', '--code-coverage'))
